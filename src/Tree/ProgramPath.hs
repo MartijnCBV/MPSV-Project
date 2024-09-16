@@ -36,34 +36,50 @@ controlLeaf :: Stmt -> ControlPath
 controlLeaf stmt = Uni stmt Leaf
 
 extractPaths :: Int -> Stmt -> ControlPath
-extractPaths 0 _                 = Leaf
-extractPaths _ stmt@Skip         = controlLeaf stmt
-extractPaths _ stmt@(Assert {})  = controlLeaf stmt
-extractPaths _ stmt@(Assume {})  = controlLeaf stmt
-extractPaths _ stmt@(Assign {})  = controlLeaf stmt
-extractPaths _ stmt@(AAssign {}) = controlLeaf stmt
-extractPaths n (Block _ stmt)    = extractPaths n stmt
+extractPaths n stmt = fst $ extractPaths' n ([] $+> stmt)
 
-extractPaths n (IfThenElse cond thenStmt elseStmt) =
-  Bin cond (extractPaths (n - 1) thenStmt) (extractPaths (n - 1) elseStmt)
-extractPaths n while@(While cond body) = Bin cond (extractPaths (n - 1) (body +: while)) Leaf
+($+>) :: a -> b -> (b, a)
+a $+> b = (b, a)
+infixr 0 $+>
 
-extractPaths n (Seq (Block _ stmt1) stmt2) = extractPaths n (stmt1 +: stmt2)
+extractPaths' :: Int -> (Stmt, [Stmt]) -> (ControlPath, [Stmt])
+extractPaths' 0 (_, handles)                 = handles $+> Leaf
+extractPaths' _ (stmt@Skip, handles)         = handles $+> controlLeaf stmt
+extractPaths' _ (stmt@(Assert {}), handles)  = handles $+> controlLeaf stmt
+extractPaths' _ (stmt@(Assume {}), handles)  = handles $+> controlLeaf stmt
+extractPaths' _ (stmt@(Assign {}), handles)  = handles $+> controlLeaf stmt
+extractPaths' _ (stmt@(AAssign {}), handles) = handles $+> controlLeaf stmt
+extractPaths' n (Block _ stmt, handles)      = extractPaths' n (handles $+> stmt)
+
+extractPaths' n (IfThenElse cond thenStmt elseStmt, handles) =
+  handles $+> Bin cond thenPaths elsePaths
+  where thenPaths = fst $ extractPaths' (n - 1) (handles $+> thenStmt)
+        elsePaths = fst $ extractPaths' (n - 1) (handles $+> elseStmt)
+
+extractPaths' n (while@(While cond body), handles) =
+  handles $+> Bin cond (fst $ extractPaths' (n - 1) (handles $+> body +: while)) Leaf
+
+extractPaths' n (TryCatch _ try catch, handles) = extractPaths' n ((catch : handles) $+> try)
+
+extractPaths' n (Seq (Block _ stmt1) stmt2, handles) = extractPaths' n (handles $+> (stmt1 +: stmt2))
 
 -- append statements following an if-then-else to both branches
-extractPaths n (Seq (IfThenElse cond thenStmt elseStmt) stmt) =
-  Bin cond thenPaths elsePaths
-    where thenPaths = extractPaths (n - 1) (thenStmt +: stmt)
-          elsePaths = extractPaths (n - 1) (elseStmt +: stmt)
+extractPaths' n (Seq (IfThenElse cond thenStmt elseStmt) stmt, handles) =
+  handles $+> Bin cond thenPaths elsePaths
+    where thenPaths = fst $ extractPaths' (n - 1) (handles $+> thenStmt +: stmt)
+          elsePaths = fst $ extractPaths' (n - 1) (handles $+> elseStmt +: stmt)
 
-extractPaths n while@(Seq (While cond body) stmt) = Bin cond whilePaths exitPaths
-  where whilePaths = extractPaths (n - 1) (body +: while)
-        exitPaths  = extractPaths (n - 1) stmt
+extractPaths' n (while@(Seq (While cond body) stmt), handles) =
+  handles $+> Bin cond whilePaths exitPaths
+  where whilePaths = fst $ extractPaths' (n - 1) (handles $+> (body +: while))
+        exitPaths  = fst $ extractPaths' (n - 1) (handles $+> stmt)
 
-extractPaths n (Seq stmt1 stmt2) = Uni stmt1 (extractPaths (n - 1) stmt2)
+extractPaths' n (Seq (TryCatch _ try catch) stmt2, handles) =
+  extractPaths' n ((catch : handles) $+> try +: stmt2)
 
-extractPaths _ _ = error "not yet implemented"
--- extractPaths (While cond body) = Branch cond thenStmt elseStmt
+extractPaths' n (Seq stmt1 stmt2, handles) = handles $+> Uni stmt1 (fst $ extractPaths' (n - 1) (handles $+> stmt2))
+
+extractPaths' _ _ = error "not yet implemented"
 
 toMaybe :: Either l r -> Maybe r
 toMaybe (Right r) = Just r
