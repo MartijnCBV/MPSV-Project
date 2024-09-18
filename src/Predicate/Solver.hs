@@ -41,7 +41,9 @@ main = do
 -------------------------------------
 
 toPredicate :: Expr -> Z3 AST
-toPredicate (Var name) = mkFreshIntVar name
+toPredicate (Var name) = do --TODO support Var BOOL
+  symbol <- (mkStringSymbol name)
+  mkIntVar symbol
 toPredicate (LitI i) = mkInteger (toInteger i)
 toPredicate (LitB b) = mkBool b
 toPredicate (Parens expr) = toPredicate expr
@@ -52,8 +54,8 @@ toPredicate (ArrayElem (Var name) i@(LitI _)) = do
   i_ <- toPredicate i
   mkSelect a_ i_
 toPredicate (OpNeg expr) = do
-  pred <- toPredicate expr
-  mkNot pred
+  p <- toPredicate expr
+  mkNot p
 toPredicate (BinopExpr op a b) = toBinOpPredicate op (toPredicate a) (toPredicate b)
 -- toPredicate (Forall) = mkForall 
 -- toPredicate (Exists) = mkExists 
@@ -90,21 +92,53 @@ mkWithASTPair mkOperation e1 e2  =  do
   b <- e2
   mkOperation a b
 
-
-testExpr :: Expr
-testExpr = BinopExpr GreaterThan (Var "a") (LitI 2)
-
-testPredicate :: Expr -> IO ()
-testPredicate expr = do
-   p <- evalZ3 . assertPredicate $ expr
-   print p
-
-assertPredicate :: Expr -> Z3 Result
-assertPredicate expr = do
+assertPredicate :: Expr -> [String] -> [String] -> Z3 (Result, [Maybe Integer])
+-- assertPredicate :: Expr -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool])
+assertPredicate expr intNames boolNames = do
   p <- toPredicate expr
   assert p
   (sat, m) <- solverCheckAndGetModel
-  return sat
+
+  intValues <- foldr (\int ints -> do 
+    i <- int
+    is <- ints
+    return (i:is)) (return []) (map (linkAndEvalInt m) intNames)
+  -- TODO: cleaner way to get [Z3 (Maybe Integer)] -> Z3 [Maybe Integer]
+
+  -- TODO: booleans!
+  -- boolValues <- foldr (\x xs -> do 
+  --   y <- x
+  --   ys <- xs
+  --   return (y:ys)) (return []) (map (linkAndEvalBool m) boolNames)
+
+  return (sat, intValues)
+
+linkAndEvalInt :: Maybe Model -> String -> Z3 (Maybe Integer)
+linkAndEvalInt Nothing _ = return Nothing
+linkAndEvalInt (Just model) str = do
+  symbol <- mkStringSymbol str
+  int <- mkIntVar symbol
+  evalInt model int
+
+-- TODO: booleans!
+-- linkAndEvalBool :: Maybe Model -> String -> Z3 (Maybe Bool)
+-- linkAndEvalBool Nothing _ = return Nothing
+-- linkAndEvalBool (Just model) str = do
+--   symbol <- mkStringSymbol str
+--   bool <- mkBoolVar symbol
+--   evalBool model bool
+
+
+
+testExpr :: Expr
+testExpr = BinopExpr Or a b
+  where a = BinopExpr GreaterThan (Var "a") (LitI 3)
+        b = OpNeg (BinopExpr Equal (Var "b") (LitI 4))
+
+testPredicate :: Expr -> [String] -> [String] -> IO ()
+testPredicate expr intNames boolNames = do
+   r <- evalZ3 (assertPredicate expr intNames boolNames)
+   print r
 
 testDefaultPredicate :: IO ()
-testDefaultPredicate = testPredicate testExpr
+testDefaultPredicate = testPredicate testExpr ["a", "b"] []
