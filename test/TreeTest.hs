@@ -98,6 +98,21 @@ testWhileExtract =
   )
   (extractPaths 6 loopingProg))
 
+testErrorsOn :: Test
+testErrorsOn = TestList [
+  TestCase (assertEqual "division throws"
+    (Just $ opEqual varX zero)
+    (errorsOn $ opDivide lit10 varX)
+  ),
+  TestCase (
+    assertEqual "array access throws"
+    (Just $ opOr (opLessThan varX zero) (opGreaterThanEqual varX (SizeOf (Var "a"))))
+    (errorsOn $ ArrayElem (Var "a") varX)
+  )
+  ]
+
+-- TODO: write unit tests for try-catch
+
 tests :: Test
 tests = TestList [
   TestLabel "prepend" testPrepend,
@@ -106,7 +121,8 @@ tests = TestList [
   TestLabel "length 2" testExtractLength2,
   TestLabel "length 3" testExtractLength3,
   TestLabel "test if" testIfExtract,
-  TestLabel "test while" testWhileExtract
+  TestLabel "test while" testWhileExtract,
+  TestLabel "errors-on collection" testErrorsOn
   ]
  
 main :: IO ()
