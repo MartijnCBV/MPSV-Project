@@ -47,7 +47,7 @@ extractPaths n (Block _ stmt)    = extractPaths n stmt
 
 extractPaths n (IfThenElse cond thenStmt elseStmt) =
   Bin cond (extractPaths (n - 1) thenStmt) (extractPaths (n - 1) elseStmt)
-extractPaths n (While cond body) = Bin cond (extractPaths (n - 1) body) Leaf
+extractPaths n while@(While cond body) = Bin cond (extractPaths (n - 1) (body +: while)) Leaf
 
 extractPaths n (Seq (Block _ stmt1) stmt2) = extractPaths n (stmt1 +: stmt2)
 
