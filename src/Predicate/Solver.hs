@@ -54,7 +54,7 @@ toPredicate (ArrayElem (Var name) i@(LitI _)) = do
 toPredicate (OpNeg expr) = do
   pred <- toPredicate expr
   mkNot pred
-toPredicate (BinopExpr op a b) = toBinOpPredicate op a b
+toPredicate (BinopExpr op a b) = toBinOpPredicate op (toPredicate a) (toPredicate b)
 -- toPredicate (Forall) = mkForall 
 -- toPredicate (Exists) = mkExists 
 -- toPredicate (SizeOf) = 
@@ -62,10 +62,49 @@ toPredicate (BinopExpr op a b) = toBinOpPredicate op a b
 -- toPredicate (Cond) = 
 toPredicate _ = error "not implemented"
 
-toBinOpPredicate :: BinOp -> Expr -> Expr -> Z3 AST
+toBinOpPredicate :: BinOp -> Z3 AST -> Z3 AST -> Z3 AST
+toBinOpPredicate And              e1 e2 = mkWithASTList mkAnd e1 e2
+toBinOpPredicate Or               e1 e2 = mkWithASTList mkOr e1 e2
+toBinOpPredicate Implication      e1 e2 = mkWithASTPair mkImplies e1 e2
+toBinOpPredicate LessThan         e1 e2 = mkWithASTPair mkLt e1 e2
+toBinOpPredicate LessThanEqual    e1 e2 = mkWithASTPair mkEq e1 e2
+toBinOpPredicate GreaterThan      e1 e2 = mkWithASTPair mkGt e1 e2
+toBinOpPredicate GreaterThanEqual e1 e2 = mkWithASTPair mkGe e1 e2
+toBinOpPredicate Equal            e1 e2 = mkWithASTPair mkEq e1 e2
+toBinOpPredicate Minus            e1 e2 = mkWithASTList mkSub e1 e2
+toBinOpPredicate Plus             e1 e2 = mkWithASTList mkAdd e1 e2
+toBinOpPredicate Multiply         e1 e2 = mkWithASTList mkMul e1 e2
+toBinOpPredicate Divide           e1 e2 = mkWithASTPair mkDiv e1 e2
+-- toBinOpPredicate Alias            e1 e2 = TODO
 toBinOpPredicate _ _ _ = error "not implemented"
+
+mkWithASTList ::  ([AST] -> Z3 AST) -> Z3 AST -> Z3 AST -> Z3 AST
+mkWithASTList mkOperation e1 e2  =  do
+  a <- e1
+  b <- e2
+  mkOperation [a, b]
+
+mkWithASTPair ::  (AST -> AST -> Z3 AST) -> Z3 AST -> Z3 AST -> Z3 AST
+mkWithASTPair mkOperation e1 e2  =  do
+  a <- e1
+  b <- e2
+  mkOperation a b
+
+
+testExpr :: Expr
+testExpr = BinopExpr GreaterThan (Var "a") (LitI 2)
 
 testPredicate :: Expr -> IO ()
 testPredicate expr = do
-   pred <- evalZ3 (toPredicate expr)
-   putStrLn . show $ pred
+   p <- evalZ3 . assertPredicate $ expr
+   print p
+
+assertPredicate :: Expr -> Z3 Result
+assertPredicate expr = do
+  p <- toPredicate expr
+  assert p
+  (sat, m) <- solverCheckAndGetModel
+  return sat
+
+testDefaultPredicate :: IO ()
+testDefaultPredicate = testPredicate testExpr
