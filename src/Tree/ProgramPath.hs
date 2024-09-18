@@ -14,19 +14,18 @@ instance (Show u, Show b) => Show (UniBinTree u b) where
   show :: UniBinTree u b -> String
   show = printTree 0
 
+instance (Eq u, Eq b) => Eq (UniBinTree u b) where
+  (==) :: (Eq u, Eq b) => UniBinTree u b -> UniBinTree u b -> Bool
+  Leaf             == Leaf             = True
+  (Uni val1 rest1) == (Uni val2 rest2) = val1 == val2 && rest1 == rest2
+  (Bin val1 l1 r1) == (Bin val2 l2 r2) = val1 == val2 && l1 == l2 && r1 == r2
+  _                == _                = False
+
 printTree :: (Show u, Show b) => Int -> UniBinTree u b -> String
 printTree n Leaf               = replicate (n * 2) ' ' ++ "Leaf\n"
 printTree n (Uni u next)       = replicate (n * 2) ' ' ++ show u ++ "\n" ++ printTree n next
 printTree n (Bin b left right) = replicate (n * 2) ' ' ++ show b ++ "\n" ++ indent ++ "< LEFT >\n" ++ printTree (n + 1) left ++ indent ++ "< RIGHT >\n" ++ printTree (n + 1) right
   where indent = replicate ((n + 1) * 2) ' '
-
-orElse :: Maybe t -> Maybe t -> Maybe t
-orElse val@(Just _) _   = val
-orElse Nothing      def = def
-
--- data ControlPath = Basic Stmt (Maybe ControlPath)
---   | Branch Expr ControlPath ControlPath
---   deriving (Show)
 
 (+:) :: Stmt -> Stmt -> Stmt
 (Seq lstmt1 lstmt2) +: rstmt =
@@ -57,7 +56,7 @@ extractPaths n (Seq (IfThenElse cond thenStmt elseStmt) stmt) =
     where thenPaths = extractPaths (n - 1) (thenStmt +: stmt)
           elsePaths = extractPaths (n - 1) (elseStmt +: stmt)
 
-extractPaths n (Seq while@(While cond body) stmt) = Bin cond whilePaths exitPaths
+extractPaths n while@(Seq (While cond body) stmt) = Bin cond whilePaths exitPaths
   where whilePaths = extractPaths (n - 1) (body +: while)
         exitPaths  = extractPaths (n - 1) stmt
 
