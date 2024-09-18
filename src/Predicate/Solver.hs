@@ -8,62 +8,49 @@ import qualified Data.Traversable as T
 
 import Z3.Monad
 
-
---
--- A simple example to construct the formula a>b && b>0, and then
--- we will SAT-check it.
---
-
--- script has type Z3 (...)
-script = do
-  a <- mkFreshIntVar "a"
-  b <- mkFreshIntVar "b"
-  _0 <- mkInteger 0
-  t1 <- mkGt a b
-  t2 <- mkGt b _0
-  f  <- mkAnd [t1,t2]
-
-  -- a > b && b > 0 to z3 state:
-  assert f
-  -- SAT-check and get the model:
-  (sat,Just m) <- solverCheckAndGetModel
-  aVal <- evalInt m a
-  bVal <- evalInt m b
-  return(sat,aVal,bVal)
-
-
-main :: IO ()
-main = do
-   r <- evalZ3 script
-   putStrLn . show $ r
-
-
--------------------------------------
-
+-- | Convert an Expr to a Z3 predicate which can be evaluated
 toPredicate :: Expr -> Z3 AST
 toPredicate (Var name) = do --TODO support Var BOOL
-  symbol <- (mkStringSymbol name)
+  symbol <- mkStringSymbol name
   mkIntVar symbol
 toPredicate (LitI i) = mkInteger (toInteger i)
 toPredicate (LitB b) = mkBool b
 toPredicate (Parens expr) = toPredicate expr
-toPredicate (ArrayElem (Var name) i@(LitI _)) = do
-  int_  <- (mkIntSort :: Z3 Sort)
-  int_array <- mkArraySort int_ int_
-  a_ <- mkFreshConst name int_array
-  i_ <- toPredicate i
-  mkSelect a_ i_
+toPredicate (ArrayElem (Var name) indexExpr@(LitI _)) = do
+  symbol <- mkStringSymbol name
+  int_type  <- mkIntSort
+  int_array_type <- mkArraySort int_type int_type
+  array <- mkConst symbol int_array_type
+
+  index <- toPredicate indexExpr
+  mkSelect array index
 toPredicate (OpNeg expr) = do
   p <- toPredicate expr
   mkNot p
 toPredicate (BinopExpr op a b) = toBinOpPredicate op (toPredicate a) (toPredicate b)
--- toPredicate (Forall) = mkForall 
+toPredicate (Forall freshVarName expr) = do
+  mkForall 
+
+  -- | Create a forall formula.
+--
+-- The bound variables are de-Bruijn indices created using 'mkBound'.
+--
+-- Z3 applies the convention that the last element in /xs/ refers to the
+-- variable with index 0, the second to last element of /xs/ refers to the
+-- variable with index 1, etc.
+mkForall :: Context
+          -> [Pattern]  -- ^ Instantiation patterns (see 'mkPattern').
+          -> [Symbol]   -- ^ Bound (quantified) variables /xs/.
+          -> [Sort]     -- ^ Sorts of the bound variables.
+          -> AST        -- ^ Body of the quantifier.
+          -> IO AST
 -- toPredicate (Exists) = mkExists 
 -- toPredicate (SizeOf) = 
 -- toPredicate (RepBy) = 
 -- toPredicate (Cond) = 
 toPredicate _ = error "not implemented"
 
+-- | BinOp options for toPredicate
 toBinOpPredicate :: BinOp -> Z3 AST -> Z3 AST -> Z3 AST
 toBinOpPredicate And              e1 e2 = mkWithASTList mkAnd e1 e2
 toBinOpPredicate Or               e1 e2 = mkWithASTList mkOr e1 e2
@@ -80,21 +67,24 @@ toBinOpPredicate Divide           e1 e2 = mkWithASTPair mkDiv e1 e2
 -- toBinOpPredicate Alias            e1 e2 = TODO
 toBinOpPredicate _ _ _ = error "not implemented"
 
+-- | Pass 2 Z3 AST arguments as a list [AST] to func
 mkWithASTList ::  ([AST] -> Z3 AST) -> Z3 AST -> Z3 AST -> Z3 AST
 mkWithASTList mkOperation e1 e2  =  do
   a <- e1
   b <- e2
   mkOperation [a, b]
 
+-- | Pass 2 Z3 AST arguments as a pair (AST, AST) to func
 mkWithASTPair ::  (AST -> AST -> Z3 AST) -> Z3 AST -> Z3 AST -> Z3 AST
 mkWithASTPair mkOperation e1 e2  =  do
   a <- e1
   b <- e2
   mkOperation a b
 
+-- | Evaluate if expression is satisfiable and with which values
 assertPredicate :: Expr -> [String] -> [String] -> Z3 (Result, [Maybe Integer])
 -- assertPredicate :: Expr -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool])
-assertPredicate expr intNames boolNames = do
+assertPredicate expr intNames _ = do
   p <- toPredicate expr
   assert p
   (sat, m) <- solverCheckAndGetModel
@@ -113,6 +103,7 @@ assertPredicate expr intNames boolNames = do
 
   return (sat, intValues)
 
+-- | Evaluate integer based on name
 linkAndEvalInt :: Maybe Model -> String -> Z3 (Maybe Integer)
 linkAndEvalInt Nothing _ = return Nothing
 linkAndEvalInt (Just model) str = do
@@ -121,6 +112,7 @@ linkAndEvalInt (Just model) str = do
   evalInt model int
 
 -- TODO: booleans!
+-- | Evaluate bool based on name
 -- linkAndEvalBool :: Maybe Model -> String -> Z3 (Maybe Bool)
 -- linkAndEvalBool Nothing _ = return Nothing
 -- linkAndEvalBool (Just model) str = do
@@ -130,15 +122,24 @@ linkAndEvalInt (Just model) str = do
 
 
 
-testExpr :: Expr
-testExpr = BinopExpr Or a b
+testExprBinOp :: Expr
+testExprBinOp = BinopExpr And (BinopExpr And a b) c
   where a = BinopExpr GreaterThan (Var "a") (LitI 3)
-        b = OpNeg (BinopExpr Equal (Var "b") (LitI 4))
+        b = BinopExpr Equal (Var "a") (ArrayElem (Var "b") (LitI 1))
+        c = BinopExpr Equal (Var "c") (ArrayElem (Var "b") (LitI 1))
+
+-- (forall i :: ((0<=i && (i< #a)) ==>  (a[i] >= a[0]))) 
+testExprForall :: Expr
+testExprForall = Forall (Var "i") (BinOp Implication lengthCheck elementCheck)
+  where lengthCheck = BinopExpr And (BinOp LessThanEqual 0 (Var "i")) (BinOp LessThanEqual (Var "i") (SizeOf "a"))
+        elementCheck = BinopExpr GreaterThanEqual (ArrayElem (Var "a") (Var "i")) (ArrayElem (Var "a") (LitI 0))
 
 testPredicate :: Expr -> [String] -> [String] -> IO ()
 testPredicate expr intNames boolNames = do
    r <- evalZ3 (assertPredicate expr intNames boolNames)
    print r
 
+
+
 testDefaultPredicate :: IO ()
-testDefaultPredicate = testPredicate testExpr ["a", "b"] []
+testDefaultPredicate = testPredicate testExprForall ["i", "a"] []
