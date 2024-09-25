@@ -23,6 +23,8 @@ library gclparser-lib
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
                      , Tree.ProgramPath
+                     , Traverse
+                     , Type
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
