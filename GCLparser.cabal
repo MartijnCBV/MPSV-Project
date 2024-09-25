@@ -12,7 +12,7 @@ build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
 
-Library
+library gclparser-lib
   exposed-modules:     GCLParser.Parser
                      , GCLParser.GCLDatatype
                      , GCLParser.PrettyPrint
@@ -22,6 +22,7 @@ Library
                      , GCLLexer.Token
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
+                     , Tree.ProgramPath
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
@@ -35,3 +36,10 @@ Library
   GHC-Options:         -Wall
   default-extensions:  TupleSections
                      , NamedFieldPuns
+
+test-suite tests
+    type: exitcode-stdio-1.0
+    main-is: TreeTest.hs
+    build-depends: base >=4.10, HUnit >=1.6, gclparser-lib
+    hs-source-dirs: test
+    default-language: Haskell2010

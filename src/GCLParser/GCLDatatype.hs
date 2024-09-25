@@ -23,7 +23,7 @@ data Type
 
 data VarDeclaration 
     = VarDeclaration String Type
-    deriving (Show)
+    deriving (Show, Eq)
 
 {-
 data Procedure 
@@ -55,6 +55,7 @@ data Stmt
     | While      Expr             Stmt   
     | Block      [VarDeclaration] Stmt   
     | TryCatch   String           Stmt   Stmt
+    deriving (Eq)
 --    | Call       [String]         [Expr] String
 
 instance Show Stmt where
