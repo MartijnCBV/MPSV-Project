@@ -3,7 +3,7 @@
 // N is an experiment parameter; replace it with a concrete value.
 
 bsort( a : []int | b : []int) {
-  assume #a>=0 && #a>=N ;
+  assume #a>=0 && #a<=N ;
   var k:int {
     k := 0 ;
     // inv of outer loop
