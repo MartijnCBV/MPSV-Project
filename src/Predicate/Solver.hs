@@ -17,38 +17,50 @@ toPredicate (LitI i) = mkInteger (toInteger i)
 toPredicate (LitB b) = mkBool b
 toPredicate (Parens expr) = toPredicate expr
 toPredicate (ArrayElem (Var name) indexExpr@(LitI _)) = do
-  symbol <- mkStringSymbol name
-  int_type  <- mkIntSort
-  int_array_type <- mkArraySort int_type int_type
-  array <- mkConst symbol int_array_type
-
+  array <- toArrayPredicate name
   index <- toPredicate indexExpr
   mkSelect array index
 toPredicate (OpNeg expr) = do
   p <- toPredicate expr
   mkNot p
 toPredicate (BinopExpr op a b) = toBinOpPredicate op (toPredicate a) (toPredicate b)
-toPredicate (Forall freshVarName expr) = do
-  mkForall 
-
-  -- | Create a forall formula.
---
--- The bound variables are de-Bruijn indices created using 'mkBound'.
---
--- Z3 applies the convention that the last element in /xs/ refers to the
--- variable with index 0, the second to last element of /xs/ refers to the
--- variable with index 1, etc.
-mkForall :: Context
-          -> [Pattern]  -- ^ Instantiation patterns (see 'mkPattern').
-          -> [Symbol]   -- ^ Bound (quantified) variables /xs/.
-          -> [Sort]     -- ^ Sorts of the bound variables.
-          -> AST        -- ^ Body of the quantifier.
-          -> IO AST
--- toPredicate (Exists) = mkExists 
--- toPredicate (SizeOf) = 
--- toPredicate (RepBy) = 
--- toPredicate (Cond) = 
+toPredicate (Forall boundVarName expr) = do
+  intSort <- mkIntSort
+  varSymbol <- mkStringSymbol boundVarName
+  arg <- mkBound 0 intSort
+  mkForall [] [varSymbol] [intSort] =<< (toPredicate expr)
+toPredicate (Exists boundVarName expr) = do
+  intSort <- mkIntSort
+  varSymbol <- mkStringSymbol boundVarName
+  arg <- mkBound 0 intSort
+  mkExists [] [varSymbol] [intSort] =<< (toPredicate expr)
+toPredicate (SizeOf (Var name)) = do
+  length <- toPredicate (Var ("#" ++ name))
+  -- Forall i: i >= 0 && i < length
+  -- (i is renamed to i#name to ensure uniqueness)
+  lengthConstraint <- toPredicate $ Forall ("i#" ++ name) 
+    (BinopExpr And (BinopExpr GreaterThanEqual (Var ("i#" ++ name)) (LitI 0)) 
+    (BinopExpr LessThan (Var ("i#" ++ name)) (Var ("#" ++ name))))
+  assert lengthConstraint
+  return length
+toPredicate (RepBy (Var arrayName) indexExpr newValueExpr) = do
+  array <- toArrayPredicate arrayName
+  index <- toPredicate indexExpr
+  newValue <- toPredicate newValueExpr
+  mkStore array index newValue
+toPredicate (Cond ifExpr thenExpr elseExpr) = do
+  ifPred <- toPredicate ifExpr
+  thenPred <- toPredicate thenExpr
+  elsePred <- toPredicate elseExpr
+  mkIte ifPred thenPred elsePred
 toPredicate _ = error "not implemented"
+
+toArrayPredicate :: String -> Z3 AST
+toArrayPredicate name = do
+  symbol <- mkStringSymbol name
+  int_type  <- mkIntSort
+  int_array_type <- mkArraySort int_type int_type
+  mkConst symbol int_array_type
 
 -- | BinOp options for toPredicate
 toBinOpPredicate :: BinOp -> Z3 AST -> Z3 AST -> Z3 AST
@@ -130,8 +142,8 @@ testExprBinOp = BinopExpr And (BinopExpr And a b) c
 
 -- (forall i :: ((0<=i && (i< #a)) ==>  (a[i] >= a[0]))) 
 testExprForall :: Expr
-testExprForall = Forall (Var "i") (BinOp Implication lengthCheck elementCheck)
-  where lengthCheck = BinopExpr And (BinOp LessThanEqual 0 (Var "i")) (BinOp LessThanEqual (Var "i") (SizeOf "a"))
+testExprForall = Forall "i" (BinopExpr Implication lengthCheck elementCheck)
+  where lengthCheck = BinopExpr And (BinopExpr LessThanEqual (LitI 0) (Var "i")) (BinopExpr LessThanEqual (Var "i") (SizeOf (Var "a")))
         elementCheck = BinopExpr GreaterThanEqual (ArrayElem (Var "a") (Var "i")) (ArrayElem (Var "a") (LitI 0))
 
 testPredicate :: Expr -> [String] -> [String] -> IO ()
@@ -143,3 +155,25 @@ testPredicate expr intNames boolNames = do
 
 testDefaultPredicate :: IO ()
 testDefaultPredicate = testPredicate testExprForall ["i", "a"] []
+
+
+testFA :: Z3 Result 
+testFA = do
+  intSort <- mkIntSort
+  arraySort <- mkArraySort intSort intSort
+  a <- mkFreshVar "a" arraySort
+  _0 <- mkInteger 0
+  _1 <- mkInteger 1
+  _10 <- mkInteger 10
+  _7 <- mkInteger 7
+  _5 <- mkInteger 50
+  assert =<< mkEq _10 =<< mkSelect a _0
+  assert =<< mkEq _7 =<< mkSelect a _1
+  x <- mkStringSymbol "x"
+  arg <- mkBound 0 intSort
+  xint <- mkConst x intSort
+  assert =<< mkForall [] [x] [intSort] =<< mkLe _5 =<< mkSelect a arg
+  (sat, m) <- solverCheckAndGetModel
+  return sat
+
+testSFA = evalZ3 testFA
