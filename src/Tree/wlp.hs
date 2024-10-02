@@ -1,4 +1,6 @@
-import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication, opOr)
+module Tree.Wlp where
+
+import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
 
 repBy :: (String -> Expr) -> String -> Expr -> Expr -> Expr
 repBy f s = RepBy (f s)
@@ -6,15 +8,29 @@ repBy f s = RepBy (f s)
 opBinParens :: Expr -> (Expr -> Expr -> Expr) -> Expr -> Expr
 opBinParens e1 f e2 = Parens e1 `f` Parens e2
 
+wlpBase :: (Stmt -> Expr -> Expr) -> Stmt -> Expr -> Expr
+wlpBase _ Skip                       expr = expr
+wlpBase recFunc assert@(Assert _)    expr = recFunc assert expr
+wlpBase recFunc assume@(Assume _)    expr = recFunc assume expr
+wlpBase _ (Assign s e)               expr = repBy Var s expr e
+wlpBase recFunc (AAssign s e1 e2)    expr = flip recFunc expr $ Assign s $ repBy Var s e1 e2
+wlpBase recFunc (Seq s1 s2)          expr = recFunc s1 $ recFunc s2 expr
+wlpBase _ _ _ = undefined
+-- these are unnecessary
+-- wlpBase _ (DrefAssign s e)           expr = repBy Dereference s expr e
+-- wlpBase recFunc (IfThenElse e s1 s2) expr = opBinParens (e `opAnd` recFunc s1 expr) opOr (OpNeg e `opAnd` recFunc s2 expr)
+-- wlpBase _ (While _ _)                _    = error "while not supported by wlp"
+-- wlpBase _ (Block _ _)                expr = expr
+-- wlpBase _ (TryCatch {})              _    = error "try catch not supported by wlp"
+
 wlp :: Stmt -> Expr -> Expr
-wlp Skip                 expr = expr
-wlp (Assert e)           expr = opBinParens e opAnd expr
-wlp (Assume e)           expr = opBinParens e opImplication expr
-wlp (Assign s e)         expr = repBy Var s expr e
-wlp (AAssign s e1 e2)    expr = flip wlp expr $ Assign s $ repBy Var s e1 e2
-wlp (DrefAssign s e)     expr = repBy Dereference s expr e
-wlp (Seq s1 s2)          expr = wlp s1 $ wlp s2 expr
-wlp (IfThenElse e s1 s2) expr = opBinParens (e `opAnd` wlp s1 expr) opOr (OpNeg e `opAnd` wlp s2 expr)
-wlp (While e s)          expr = error "while not supported by wlp"
-wlp (Block vs s)         expr = expr
-wlp (TryCatch s s1 s2)   expr = error "try catch not supported by wlp"
+wlp = wlpBase wlpRec
+  where wlpRec (Assert e) expr = opBinParens e opAnd expr
+        wlpRec (Assume e) expr = opBinParens e opImplication expr
+        wlpRec _ _ = error "unsupported"
+
+feasibleWlp :: Stmt -> Expr -> Expr
+feasibleWlp = wlpBase wlpRec
+  where wlpRec (Assert _) expr = expr
+        wlpRec (Assume e) expr = opBinParens e opAnd expr
+        wlpRec _ _ = error "unsupported"
