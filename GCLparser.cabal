@@ -23,6 +23,7 @@ Library
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
                      , Tree.ProgramPath
+                     , Predicate.Solver
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
