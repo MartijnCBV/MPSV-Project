@@ -2,8 +2,10 @@ module Simplifier.Simplifier where
 import Simplifier.Expr
 import Simplifier.Boolean
 
+
 applyLaws :: RedTypExpr -> [Law] -> RedTypExpr
 applyLaws e ls = head $ applyLawsTrace e ls
+
 
 applyLawsTrace :: RedTypExpr -> [Law] -> [RedTypExpr]
 applyLawsTrace e ls = let e' = foldl applyLaw [e] ls
@@ -11,22 +13,28 @@ applyLawsTrace e ls = let e' = foldl applyLaw [e] ls
                           then e'
                           else applyLawsTrace (head e') ls ++ e'
 
+
 applyLaw :: [RedTypExpr] -> Law -> [RedTypExpr]
 applyLaw es l | head es == e = es
               | otherwise    = e : es
     where e = l $ head es 
 
+
 laws :: [Law]
 laws = blaws ++ ilaws
+
 
 blaws :: [Law]
 blaws = [assoc, dneg, neg, annihilate, iden, idem, compl]
 
+
 ilaws :: [Law]
 ilaws = []
 
+
 printLawTrace :: [RedTypExpr] -> IO ()
 printLawTrace es = mapM_ print $ reverse es
+
 
 expr1 :: TypExpr
 expr1 = Parens (BinopExpr And
@@ -39,6 +47,7 @@ expr1 = Parens (BinopExpr And
             (BinopExpr And (LitB True) (LitB True))          -- True and True
         )
     )
+
 
 test :: IO ()
 test = do

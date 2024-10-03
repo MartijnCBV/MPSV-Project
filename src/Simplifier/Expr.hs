@@ -1,15 +1,13 @@
 {-# LANGUAGE InstanceSigs #-}
 module Simplifier.Expr where
 
-import Debug.Trace
-
-debug :: c -> String -> c
-debug = flip trace
 
 type Law = RedTypExpr -> RedTypExpr
 
+
 data Typ = IntTyp | BoolTyp | ArrayTyp Typ
     deriving (Eq, Show, Ord)
+
 
 data TypExpr
     = Var                Typ String
@@ -26,6 +24,7 @@ data TypExpr
     | Cond               TypExpr    TypExpr TypExpr
     deriving (Eq)
 
+
 instance Show TypExpr where
     show :: TypExpr -> String
     show (Var       _  s        ) = s
@@ -40,10 +39,12 @@ instance Show TypExpr where
     show (SizeOf    e           ) = "#(" ++ show e ++ ")"
     show _                           = "undefined"
 
+
 data BinOp = And | Or | Implication
     | LessThan | LessThanEqual | GreaterThan | GreaterThanEqual | Equal
     | Minus | Plus | Multiply | Divide
     deriving (Eq)
+
 
 instance Show BinOp where
     show :: BinOp -> String
@@ -60,6 +61,7 @@ instance Show BinOp where
     show Multiply         = "*"
     show Divide           = "/"
 
+
 data RedTypExpr
     = RedVar                Typ String
     | RedLitI               Int
@@ -75,6 +77,7 @@ data RedTypExpr
     | RedCond               RedTypExpr  RedTypExpr  RedTypExpr
     deriving (Eq, Ord)
 
+
 instance Show RedTypExpr where
     show :: RedTypExpr -> String
     show (RedVar       _  s        ) = s
@@ -89,10 +92,12 @@ instance Show RedTypExpr where
     show (RedSizeOf    e           ) = "#(" ++ show e ++ ")"
     show _                           = "undefined"
 
+
 data RedBinOp 
     = RedLessThan | RedEqual
     | RedMinus | RedPlus | RedMultiply | RedDivide
     deriving (Eq, Ord)
+
 
 instance Show RedBinOp where
     show :: RedBinOp -> String
@@ -102,6 +107,7 @@ instance Show RedBinOp where
     show RedPlus     = "+"
     show RedMultiply = "*"
     show RedDivide   = "/"
+
 
 reduceTypExp :: TypExpr -> RedTypExpr
 reduceTypExp (Var       t  s    ) = RedVar          t                 s
@@ -117,6 +123,7 @@ reduceTypExp (SizeOf    e       ) = RedSizeOf       $ reduceTypExp e
 reduceTypExp (RepBy     e1 e2 e3) = RedRepBy        (reduceTypExp e1) (reduceTypExp e2) $ reduceTypExp e3
 reduceTypExp (Cond      e1 e2 e3) = RedCond         (reduceTypExp e1) (reduceTypExp e2) $ reduceTypExp e3
 
+
 reduceBinOpExpr :: BinOp -> RedTypExpr -> RedTypExpr -> RedTypExpr
 reduceBinOpExpr And              e1 e2 = RedAnd          [e1, e2]
 reduceBinOpExpr Or               e1 e2 = RedOpNeg        $ RedAnd [RedOpNeg e1, RedOpNeg e2]
@@ -130,6 +137,7 @@ reduceBinOpExpr Minus            e1 e2 = RedBinopExpr    RedMinus    e1         
 reduceBinOpExpr Plus             e1 e2 = RedBinopExpr    RedPlus     e1                                    e2
 reduceBinOpExpr Multiply         e1 e2 = RedBinopExpr    RedMultiply e1                                    e2
 reduceBinOpExpr Divide           e1 e2 = RedBinopExpr    RedDivide   e1                                    e2
+
 
 expandRedTypExp :: RedTypExpr -> TypExpr
 expandRedTypExp (RedVar       t  s    ) = Var       t                    s
@@ -145,6 +153,7 @@ expandRedTypExp (RedExists    s  e    ) = Exists    s                    $ expan
 expandRedTypExp (RedSizeOf    e       ) = SizeOf    $ expandRedTypExp e
 expandRedTypExp (RedRepBy     e1 e2 e3) = RepBy     (expandRedTypExp e1) (expandRedTypExp e2) $ expandRedTypExp e3
 expandRedTypExp (RedCond      e1 e2 e3) = Cond      (expandRedTypExp e1) (expandRedTypExp e2) $ expandRedTypExp e3
+
 
 expandRedBinOp :: RedBinOp -> BinOp
 expandRedBinOp RedLessThan = LessThan

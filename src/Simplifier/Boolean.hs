@@ -2,6 +2,7 @@ module Simplifier.Boolean where
 import Simplifier.Expr
 import Data.List
 
+
 -- identity: 
 -- x /\ True = x
 iden :: Law
@@ -22,6 +23,7 @@ iden (RedRepBy     e1     e2 e3) = RedRepBy     (iden e1) (iden e2) $ iden e3
 iden (RedCond      e1     e2 e3) = RedCond      (iden e1) (iden e2) $ iden e3
 iden e                           = e
 
+
 -- annihilation: 
 -- x /\ False = False
 annihilate :: Law
@@ -36,6 +38,7 @@ annihilate (RedSizeOf    e           ) = RedSizeOf    $ annihilate e
 annihilate (RedRepBy     e1     e2 e3) = RedRepBy     (annihilate e1) (annihilate e2) $ annihilate e3
 annihilate (RedCond      e1     e2 e3) = RedCond      (annihilate e1) (annihilate e2) $ annihilate e3
 annihilate e                           = e
+
 
 -- idempotence:
 -- x /\ x = x
@@ -54,6 +57,7 @@ idem (RedRepBy     e1     e2 e3) = RedRepBy     (idem e1) (idem e2) $ idem e3
 idem (RedCond      e1     e2 e3) = RedCond      (idem e1) (idem e2) $ idem e3
 idem e                           = e
 
+
 -- complementation:
 -- x /\ ~x = False
 compl :: Law
@@ -71,6 +75,7 @@ compl (RedRepBy     e1     e2 e3) = RedRepBy     (compl e1) (compl e2) $ compl e
 compl (RedCond      e1     e2 e3) = RedCond      (compl e1) (compl e2) $ compl e3
 compl e                           = e
 
+
 -- double negation: 
 -- ~~x = x
 dneg :: Law
@@ -85,6 +90,7 @@ dneg (RedSizeOf    e           ) = RedSizeOf    $ dneg e
 dneg (RedRepBy     e1     e2 e3) = RedRepBy     (dneg e1) (dneg e2) $ dneg e3
 dneg (RedCond      e1     e2 e3) = RedCond      (dneg e1) (dneg e2) $ dneg e3
 dneg e                           = e
+
 
 -- negation:
 -- ~True  = False
@@ -101,6 +107,7 @@ neg (RedSizeOf    e           ) = RedSizeOf    $ neg e
 neg (RedRepBy     e1     e2 e3) = RedRepBy     (neg e1) (neg e2) $ neg e3
 neg (RedCond      e1     e2 e3) = RedCond      (neg e1) (neg e2) $ neg e3
 neg e                           = e
+
 
 -- associativity:
 -- (a /\ b) /\ c = a /\ (b /\ c)
