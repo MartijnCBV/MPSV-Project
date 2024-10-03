@@ -37,7 +37,7 @@ lstmt +: rstmt         = Seq lstmt rstmt
 controlLeaf :: Stmt -> ControlPath
 controlLeaf stmt = Uni stmt Leaf
 
-extractPaths :: Int -> Stmt -> ControlPath
+extractPaths :: (Integral n) => n -> Stmt -> ControlPath
 extractPaths n stmt = extractPaths' n ([] $+> stmt)
 
 ($+>) :: a -> b -> (b, a)
@@ -68,7 +68,7 @@ getErrors (ArrayElem array index) = [indexOOB array index]
 -- other expressions don't throw exceptions
 getErrors _ = []
 
-catchException :: Int -> Maybe Expr -> ControlPath -> [Stmt] -> ControlPath
+catchException :: (Integral n) => n -> Maybe Expr -> ControlPath -> [Stmt] -> ControlPath
 -- if there's no error condition, just continue
 catchException _ Nothing continue _ = continue
 -- when we're not in a try-catch context, throwing an exception immediately ends program execution
@@ -76,7 +76,7 @@ catchException _ (Just cond) continue [] = Bin cond Leaf continue
 -- otherwise jump to the topmost handler
 catchException n (Just cond) continue (catch : handles) = Bin cond (extractPaths' (n - 1) (handles $+> catch)) continue
 
-extractPaths' :: Int -> (Stmt, [Stmt]) -> ControlPath
+extractPaths' :: (Integral n) => n -> (Stmt, [Stmt]) -> ControlPath
 extractPaths' 0 _                       = Leaf
 extractPaths' _ (stmt@Skip, _)          = controlLeaf stmt
 extractPaths' _ (stmt@(Assert {}), _)   = controlLeaf stmt
@@ -148,7 +148,7 @@ prependStmt :: Stmt -> [Stmt] -> [Stmt]
 prependStmt stmt []    = [stmt]
 prependStmt stmt stmts = map (Seq stmt) stmts
 
-testExtract :: Int -> String -> IO (Maybe ControlPath)
+testExtract :: (Integral n) => n -> String -> IO (Maybe ControlPath)
 testExtract n file = do
   gcl <- parseGCLfile file
   return $ fmap (extractPaths n . stmt) (toMaybe gcl)

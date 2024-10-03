@@ -1,10 +1,7 @@
 module Predicate.Solver where
 
 import Type
-import Control.Applicative
-import Control.Monad ( join )
 import Data.Maybe
-import qualified Data.Traversable as T
 import Data.List
 import GCLParser.GCLDatatype (Type(PType, AType), PrimitiveType(PTInt, PTBool))
 
@@ -18,23 +15,23 @@ toPredicate expr = _toPredicate expr []
 _toPredicate :: TypedExpr -> [(Symbol, AST)] ->  Z3 AST
 _toPredicate (Var name varType) boundArgs = do
   symbol <- mkStringSymbol name
-  found <- return (find (\(argSymbol, arg) -> argSymbol == symbol) boundArgs)
+  let found = find (\(argSymbol, _) -> argSymbol == symbol) boundArgs
   if isNothing found
     then toVarPredicate symbol varType
     else do
-         (argSymbol, arg) <- return $ fromJust found
+         (_, arg) <- return $ fromJust found
          return arg
 _toPredicate (LitI i) _ = mkInteger (toInteger i)
 _toPredicate (LitB b) _ = mkBool b
 _toPredicate (Parens expr) bound = _toPredicate expr bound
-_toPredicate (ArrayElem arrayVar@(Var name (AType PTInt)) indexExpr@(LitI i)) bound = do
+_toPredicate (ArrayElem (Var name (AType PTInt)) indexExpr@(LitI _)) bound = do
   array <- toArrayPredicate name
   index <- _toPredicate indexExpr bound
   select <- mkSelect array index
   -- Add constraint: index <= length
   assert =<< mkLt index =<< mkIntVar =<< mkStringSymbol ("#" ++ name)
   return select
-_toPredicate (ArrayElem arrayVar@(Var name (AType PTInt)) indexExpr@(Var _ (PType PTInt))) bound = do
+_toPredicate (ArrayElem (Var name (AType PTInt)) indexExpr@(Var _ (PType PTInt))) bound = do
   array <- toArrayPredicate name
   index <- _toPredicate indexExpr bound
   mkSelect array index
@@ -46,21 +43,21 @@ _toPredicate (Forall boundVarName expr) otherBoundVars = do
   intSort <- mkIntSort
   argSymbol <- mkStringSymbol boundVarName
   arg <- mkBound 0 intSort
-  mkForall [] [argSymbol] [intSort] =<< (_toPredicate expr ((argSymbol, arg):otherBoundVars))
+  mkForall [] [argSymbol] [intSort] =<< _toPredicate expr ((argSymbol, arg):otherBoundVars)
 _toPredicate (Exists boundVarName expr) otherBoundVars = do
   intSort <- mkIntSort
   argSymbol <- mkStringSymbol boundVarName
   arg <- mkBound 0 intSort
-  mkExists [] [argSymbol] [intSort] =<< (_toPredicate expr ((argSymbol, arg):otherBoundVars))
+  mkExists [] [argSymbol] [intSort] =<< _toPredicate expr ((argSymbol, arg):otherBoundVars)
 _toPredicate (SizeOf (Var name (AType PTInt))) bound = _toPredicate (Var ("#" ++ name) (PType PTInt)) bound
-_toPredicate (RepBy arrayVar@(Var arrayName (AType PTInt)) indexExpr@(LitI i) newValueExpr) bound = do
+_toPredicate (RepBy (Var arrayName (AType PTInt)) indexExpr@(LitI _) newValueExpr) bound = do
   array <- toArrayPredicate arrayName
   index <- _toPredicate indexExpr bound
   -- Add constraint: index <= length
   assert =<< mkLt index =<< mkIntVar =<< mkStringSymbol ("#" ++ arrayName)
   newValue <- _toPredicate newValueExpr bound
   mkStore array index newValue
-_toPredicate (RepBy arrayVar@(Var arrayName (AType PTInt)) indexExpr@(Var _ (PType PTInt)) newValueExpr) bound = do
+_toPredicate (RepBy (Var arrayName (AType PTInt)) indexExpr@(Var _ (PType PTInt)) newValueExpr) bound = do
   array <- toArrayPredicate arrayName
   index <- _toPredicate indexExpr bound
   newValue <- _toPredicate newValueExpr bound
@@ -73,7 +70,7 @@ _toPredicate (Cond ifExpr thenExpr elseExpr) bound = do
 _toPredicate a b = error $ "not implemented, called with: " ++ show a ++ " " ++ show b
 
 toVarPredicate :: Symbol -> Type -> Z3 AST
-toVarPredicate symbol (PType PTInt)  = mkIntVar symbol 
+toVarPredicate symbol (PType PTInt)  = mkIntVar symbol
 toVarPredicate symbol (PType PTBool) = mkBoolVar symbol
 toVarPredicate symbol (AType PTInt)  = toArrayPredicate (show symbol)
 
@@ -125,16 +122,16 @@ assertPredicate expr intNames boolNames = do
     then return (sat, [], [])
     else do
       -- Unnest type: [Z3 (Maybe Integer)] -> Z3 [Maybe Integer]
-      intValues <- foldr (\int ints -> do 
+      intValues <- foldr ((\int ints -> do
         i <- int
         is <- ints
-        return (i:is)) (return []) (map (linkAndEvalInt m) intNames)
+        return (i:is)) . linkAndEvalInt m) (return []) intNames
 
       -- Unnest type: [Z3 (Maybe Bool)] -> Z3 [Maybe Bool]
-      boolValues <- foldr (\x xs -> do 
+      boolValues <- foldr ((\x xs -> do
         y <- x
         ys <- xs
-        return (y:ys)) (return []) (map (linkAndEvalBool m) boolNames)
+        return (y:ys)) . linkAndEvalBool m) (return []) boolNames
 
       return (sat, intValues, boolValues)
 
@@ -162,13 +159,13 @@ startTestForall :: IO (Result, [Maybe Integer], [Maybe Bool])
 startTestForall = evalZ3 testForall
 testForall :: Z3 (Result, [Maybe Integer], [Maybe Bool])
 testForall = do
-  expr <- return (BinopExpr And 
-                           (BinopExpr And 
-                           (BinopExpr And 
-                           (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 10)) 
-                           (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 7)))
-                           (BinopExpr Equal (SizeOf (Var "a" (AType PTInt))) (LitI 2)))                           
-                           (Forall "x" (BinopExpr LessThanEqual (LitI 7) (ArrayElem (Var "a" (AType PTInt)) (Var "x" (PType PTInt))))))
+  let expr = BinopExpr And
+              (BinopExpr And
+              (BinopExpr And
+              (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 10))
+              (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 7)))
+              (BinopExpr Equal (SizeOf (Var "a" (AType PTInt))) (LitI 2)))
+              (Forall "x" (BinopExpr LessThanEqual (LitI 7) (ArrayElem (Var "a" (AType PTInt)) (Var "x" (PType PTInt)))))
   assertPredicate expr ["#a"] []
 
 -- | Test func to test RepBy
@@ -176,17 +173,17 @@ startTestRepBy :: IO (Result, [Maybe Integer], [Maybe Bool])
 startTestRepBy = evalZ3 testRepBy
 testRepBy :: Z3 (Result, [Maybe Integer], [Maybe Bool])
 testRepBy = do
-  expr <- return (BinopExpr And 
-                  (BinopExpr And 
-                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 0)) 
-                    (BinopExpr Or 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 1)) 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))))
-                    (BinopExpr And 
-                      (BinopExpr And 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (Var "x" (PType PTInt))) 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (Var "y" (PType PTInt))))
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (Var "z" (PType PTInt)))))
+  let expr = BinopExpr And
+              (BinopExpr And
+                (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 0))
+                (BinopExpr Or
+                  (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 1))
+                  (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))))
+                (BinopExpr And
+                  (BinopExpr And
+                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (Var "x" (PType PTInt)))
+                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (Var "y" (PType PTInt))))
+                  (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (Var "z" (PType PTInt))))
 
   assertPredicate expr ["x", "y", "z"] []
 
@@ -195,18 +192,18 @@ startTestBoolVar :: IO (Result, [Maybe Integer], [Maybe Bool])
 startTestBoolVar = evalZ3 testBoolVar
 testBoolVar :: Z3 (Result, [Maybe Integer], [Maybe Bool])
 testBoolVar = do
-  expr <- return (BinopExpr And 
-                  (BinopExpr And 
-                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 0)) 
-                    (BinopExpr Or 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 1)) 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))))
-                    (BinopExpr And 
-                      (BinopExpr And 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (Var "x" (PType PTInt))) 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (Var "y" (PType PTInt))))
-                      (BinopExpr Equal 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2)) 
-                        (Var "z" (PType PTBool)))))
+  let expr = BinopExpr And
+              (BinopExpr And
+                (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 0))
+                (BinopExpr Or
+                  (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 1))
+                  (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))))
+                (BinopExpr And
+                  (BinopExpr And
+                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (Var "x" (PType PTInt)))
+                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (Var "y" (PType PTInt))))
+                  (BinopExpr Equal
+                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))
+                    (Var "z" (PType PTBool))))
 
   assertPredicate expr ["x", "y"] ["z"]

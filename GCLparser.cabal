@@ -26,7 +26,8 @@ library gclparser-lib
                      , Tree.Wlp
                      , Traverse
                      , Type
-                    --  , Predicate.Solver
+                     , Predicate.Solver
+                     , Main
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
