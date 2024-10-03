@@ -10,7 +10,7 @@ iden (RedAnd       es          ) | null es'        = RedLitB True
                                  | otherwise       = RedAnd es'
     where es' = map iden $ filter iden' es
           iden' :: RedTypExpr -> Bool
-          iden' (RedLitB True) = False `debug` "identity"
+          iden' (RedLitB True) = False
           iden' _              = True
 iden (RedBinopExpr o      e1 e2) = RedBinopExpr o (iden e1) (iden e2)
 iden (RedOpNeg     e           ) = RedOpNeg     $ iden e
@@ -25,7 +25,7 @@ iden e                           = e
 -- annihilation: 
 -- x /\ False = False
 annihilate :: Law
-annihilate (RedAnd       es          ) | RedLitB False `elem` es = RedLitB False `debug` "annihilation"
+annihilate (RedAnd       es          ) | RedLitB False `elem` es = RedLitB False
                                        | otherwise               = RedAnd $ map annihilate es
 annihilate (RedBinopExpr o      e1 e2) = RedBinopExpr o (annihilate e1) (annihilate e2)
 annihilate (RedOpNeg     e           ) = RedOpNeg     $ annihilate e
@@ -57,7 +57,7 @@ idem e                           = e
 -- complementation:
 -- x /\ ~x = False
 compl :: Law
-compl (RedAnd es)                 | or es''   = RedLitB False `debug` "complementation"
+compl (RedAnd es)                 | or es''   = RedLitB False
                                   | otherwise = RedAnd es'
     where es'  = map compl es
           es'' = map (\e -> RedOpNeg e `elem` es') es'
@@ -74,7 +74,7 @@ compl e                           = e
 -- double negation: 
 -- ~~x = x
 dneg :: Law
-dneg (RedOpNeg     (RedOpNeg e)) = dneg e `debug` "double negation"
+dneg (RedOpNeg     (RedOpNeg e)) = dneg e
 dneg (RedOpNeg     e           ) = RedOpNeg     $ dneg e
 dneg (RedBinopExpr o      e1 e2) = RedBinopExpr o (dneg e1) $ dneg e2
 dneg (RedAnd       es          ) = RedAnd       $ map dneg es
@@ -90,7 +90,7 @@ dneg e                           = e
 -- ~True  = False
 -- ~False = True
 neg :: Law
-neg (RedOpNeg     (RedLitB b) ) = RedLitB      $ not b `debug` "negation"
+neg (RedOpNeg     (RedLitB b) ) = RedLitB      $ not b
 neg (RedOpNeg     e           ) = RedOpNeg     $ neg e
 neg (RedBinopExpr o      e1 e2) = RedBinopExpr o (neg e1) $ neg e2
 neg (RedAnd       es          ) = RedAnd       $ map neg es
@@ -107,7 +107,7 @@ neg e                           = e
 assoc :: Law
 assoc (RedAnd es)             = RedAnd $ sort $ concatMap f es -- needs to be sorted for use in equality check
     where f :: RedTypExpr -> [RedTypExpr]
-          f (RedAnd es') = concatMap f es' `debug` "associativity"
+          f (RedAnd es') = concatMap f es'
           f e            = [assoc e]
 assoc (RedArrayElem e1 e2   ) = RedArrayElem (assoc e1) $ assoc e2
 assoc (RedOpNeg     e       ) = RedOpNeg     $ assoc e

@@ -24,12 +24,41 @@ data TypExpr
     | SizeOf             TypExpr
     | RepBy              TypExpr    TypExpr TypExpr
     | Cond               TypExpr    TypExpr TypExpr
-    deriving (Eq, Show)
+    deriving (Eq)
+
+instance Show TypExpr where
+    show :: TypExpr -> String
+    show (Var       _  s        ) = s
+    show (LitI      i           ) = show i
+    show (LitB      b           ) = if b then "T" else "F"
+    show (Parens    e           ) = '(' : show e ++ ")"
+    show (ArrayElem e1 e2       ) = show e1 ++ '[' : show e2 ++ "]"
+    show (OpNeg     e           ) = "~" ++ show e
+    show (BinopExpr o  e1 e2    ) = '(' : show e1 ++ ' ' : show o ++ ' ' : show e2 ++ ")"
+    show (Forall    s  e        ) = "\\-/ " ++ show s ++ '(' : show e ++ ")"
+    show (Exists    s  e        ) = "E " ++ show s ++ '(' : show e ++ ")"
+    show (SizeOf    e           ) = "#(" ++ show e ++ ")"
+    show _                           = "undefined"
 
 data BinOp = And | Or | Implication
     | LessThan | LessThanEqual | GreaterThan | GreaterThanEqual | Equal
     | Minus | Plus | Multiply | Divide
-    deriving (Eq, Show)
+    deriving (Eq)
+
+instance Show BinOp where
+    show :: BinOp -> String
+    show And              = "/\\"
+    show Or               = "\\/"
+    show Implication      = "=>"
+    show LessThan         = "<"
+    show LessThanEqual    = "<="
+    show GreaterThan      = ">"
+    show GreaterThanEqual = ">="
+    show Equal            = "="
+    show Minus            = "-"
+    show Plus             = "+"
+    show Multiply         = "*"
+    show Divide           = "/"
 
 data RedTypExpr
     = RedVar                Typ String
@@ -52,10 +81,7 @@ instance Show RedTypExpr where
     show (RedLitI      i           ) = show i
     show (RedLitB      b           ) = if b then "T" else "F"
     show (RedArrayElem e1 e2       ) = show e1 ++ '[' : show e2 ++ "]"
-    show (RedOpNeg     (RedOpNeg e)) = '~' : show (RedOpNeg e )
-    show (RedOpNeg     (RedLitB  b)) = '~' : show (RedLitB  b )
-    show (RedOpNeg     (RedAnd  es)) = '~' : show (RedAnd   es)
-    show (RedOpNeg     e           ) = "~(" ++ show e ++ ")"
+    show (RedOpNeg     e           ) = "~" ++ show e
     show (RedBinopExpr o  e1 e2    ) = '(' : show e1 ++ ' ' : show o ++ ' ' : show e2 ++ ")"
     show (RedAnd       es          ) = "/\\ " ++ show es
     show (RedForall    s  e        ) = "\\-/ " ++ show s ++ '(' : show e ++ ")"

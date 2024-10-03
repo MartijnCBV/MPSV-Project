@@ -3,10 +3,18 @@ import Simplifier.Expr
 import Simplifier.Boolean
 
 applyLaws :: RedTypExpr -> [Law] -> RedTypExpr
-applyLaws e ls = let e' = foldl (\acc law -> law acc) e ls
-                 in  if   e == e'
-                     then e
-                     else applyLaws e' ls
+applyLaws e ls = head $ applyLawsTrace e ls
+
+applyLawsTrace :: RedTypExpr -> [Law] -> [RedTypExpr]
+applyLawsTrace e ls = let e' = foldl applyLaw [e] ls
+                      in  if   e == head e'
+                          then e'
+                          else applyLawsTrace (head e') ls ++ e'
+
+applyLaw :: [RedTypExpr] -> Law -> [RedTypExpr]
+applyLaw es l | head es == e = es
+              | otherwise    = e : es
+    where e = l $ head es 
 
 laws :: [Law]
 laws = blaws ++ ilaws
@@ -16,6 +24,9 @@ blaws = [assoc, dneg, neg, annihilate, iden, idem, compl]
 
 ilaws :: [Law]
 ilaws = []
+
+printLawTrace :: [RedTypExpr] -> IO ()
+printLawTrace es = mapM_ print $ reverse es
 
 expr1 :: TypExpr
 expr1 = Parens (BinopExpr And
@@ -29,15 +40,8 @@ expr1 = Parens (BinopExpr And
         )
     )
 
-expr2 :: RedTypExpr
-expr2 = reduceTypExp expr1
-
-
 test :: IO ()
 test = do
     print expr1
-    print "-------------------------------------------------"
-    print expr2
-    print "-------------------------------------------------"
-    print $ applyLaws expr2 laws
+    printLawTrace $ applyLawsTrace (reduceTypExp expr1) laws
 
