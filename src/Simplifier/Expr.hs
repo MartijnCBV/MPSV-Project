@@ -1,8 +1,15 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Simplifier.Expr where
 
 
-type Law = RedTypExpr -> RedTypExpr
+type Law   = RedTypExpr -> RedTypExpr
+type Merge = RedTypExpr -> RedTypExpr -> RedTypExpr
+
+
+class Convertable a b where
+    convert :: a -> b
 
 
 data Typ = IntTyp | BoolTyp | ArrayTyp Typ
@@ -25,41 +32,10 @@ data TypExpr
     deriving (Eq)
 
 
-instance Show TypExpr where
-    show :: TypExpr -> String
-    show (Var       _  s        ) = s
-    show (LitI      i           ) = show i
-    show (LitB      b           ) = if b then "T" else "F"
-    show (Parens    e           ) = '(' : show e ++ ")"
-    show (ArrayElem e1 e2       ) = show e1 ++ '[' : show e2 ++ "]"
-    show (OpNeg     e           ) = "~" ++ show e
-    show (BinopExpr o  e1 e2    ) = '(' : show e1 ++ ' ' : show o ++ ' ' : show e2 ++ ")"
-    show (Forall    s  e        ) = "\\-/ " ++ show s ++ '(' : show e ++ ")"
-    show (Exists    s  e        ) = "E " ++ show s ++ '(' : show e ++ ")"
-    show (SizeOf    e           ) = "#(" ++ show e ++ ")"
-    show _                           = "undefined"
-
-
 data BinOp = And | Or | Implication
     | LessThan | LessThanEqual | GreaterThan | GreaterThanEqual | Equal
     | Minus | Plus | Multiply | Divide
     deriving (Eq)
-
-
-instance Show BinOp where
-    show :: BinOp -> String
-    show And              = "/\\"
-    show Or               = "\\/"
-    show Implication      = "=>"
-    show LessThan         = "<"
-    show LessThanEqual    = "<="
-    show GreaterThan      = ">"
-    show GreaterThanEqual = ">="
-    show Equal            = "="
-    show Minus            = "-"
-    show Plus             = "+"
-    show Multiply         = "*"
-    show Divide           = "/"
 
 
 data RedTypExpr
@@ -78,6 +54,43 @@ data RedTypExpr
     deriving (Eq, Ord)
 
 
+data RedBinOp
+    = RedLessThan | RedEqual
+    | RedMinus | RedPlus | RedMultiply | RedDivide
+    deriving (Eq, Ord)
+
+
+instance Show TypExpr where
+    show :: TypExpr -> String
+    show (Var       _  s        ) = s
+    show (LitI      i           ) = show i
+    show (LitB      b           ) = if b then "T" else "F"
+    show (Parens    e           ) = '(' : show e ++ ")"
+    show (ArrayElem e1 e2       ) = show e1 ++ '[' : show e2 ++ "]"
+    show (OpNeg     e           ) = "~" ++ show e
+    show (BinopExpr o  e1 e2    ) = '(' : show e1 ++ ' ' : show o ++ ' ' : show e2 ++ ")"
+    show (Forall    s  e        ) = "\\-/ " ++ show s ++ '(' : show e ++ ")"
+    show (Exists    s  e        ) = "E " ++ show s ++ '(' : show e ++ ")"
+    show (SizeOf    e           ) = "#(" ++ show e ++ ")"
+    show _                           = "undefined"
+
+
+instance Show BinOp where
+    show :: BinOp -> String
+    show And              = "/\\"
+    show Or               = "\\/"
+    show Implication      = "=>"
+    show LessThan         = "<"
+    show LessThanEqual    = "<="
+    show GreaterThan      = ">"
+    show GreaterThanEqual = ">="
+    show Equal            = "="
+    show Minus            = "-"
+    show Plus             = "+"
+    show Multiply         = "*"
+    show Divide           = "/"
+
+
 instance Show RedTypExpr where
     show :: RedTypExpr -> String
     show (RedVar       _  s        ) = s
@@ -93,12 +106,6 @@ instance Show RedTypExpr where
     show _                           = "undefined"
 
 
-data RedBinOp 
-    = RedLessThan | RedEqual
-    | RedMinus | RedPlus | RedMultiply | RedDivide
-    deriving (Eq, Ord)
-
-
 instance Show RedBinOp where
     show :: RedBinOp -> String
     show RedLessThan = "<"
@@ -109,56 +116,59 @@ instance Show RedBinOp where
     show RedDivide   = "/"
 
 
-reduceTypExp :: TypExpr -> RedTypExpr
-reduceTypExp (Var       t  s    ) = RedVar          t                 s
-reduceTypExp (LitI      i       ) = RedLitI         i
-reduceTypExp (LitB      b       ) = RedLitB         b
-reduceTypExp (Parens    e       ) = reduceTypExp e
-reduceTypExp (ArrayElem e1 e2   ) = RedArrayElem    (reduceTypExp e1) $ reduceTypExp e2
-reduceTypExp (OpNeg     e       ) = RedOpNeg        $ reduceTypExp e
-reduceTypExp (BinopExpr o  e1 e2) = reduceBinOpExpr o                 (reduceTypExp e1) $ reduceTypExp e2
-reduceTypExp (Forall    s  e    ) = RedForall       s                 $ reduceTypExp e
-reduceTypExp (Exists    s  e    ) = RedExists       s                 $ reduceTypExp e
-reduceTypExp (SizeOf    e       ) = RedSizeOf       $ reduceTypExp e
-reduceTypExp (RepBy     e1 e2 e3) = RedRepBy        (reduceTypExp e1) (reduceTypExp e2) $ reduceTypExp e3
-reduceTypExp (Cond      e1 e2 e3) = RedCond         (reduceTypExp e1) (reduceTypExp e2) $ reduceTypExp e3
+instance Convertable TypExpr RedTypExpr where
+    convert :: TypExpr -> RedTypExpr
+    convert (Var       t  s    ) = RedVar          t                 s
+    convert (LitI      i       ) = RedLitI         i
+    convert (LitB      b       ) = RedLitB         b
+    convert (Parens    e       ) = convert e
+    convert (ArrayElem e1 e2   ) = RedArrayElem    (convert e1) $ convert e2
+    convert (OpNeg     e       ) = RedOpNeg        $ convert e
+    convert (BinopExpr o  e1 e2) = (convert o :: Merge) (convert e1) (convert e2)
+    convert (Forall    s  e    ) = RedForall       s                 $ convert e
+    convert (Exists    s  e    ) = RedExists       s                 $ convert e
+    convert (SizeOf    e       ) = RedSizeOf       $ convert e
+    convert (RepBy     e1 e2 e3) = RedRepBy        (convert e1) (convert e2) $ convert e3
+    convert (Cond      e1 e2 e3) = RedCond         (convert e1) (convert e2) $ convert e3
 
 
-reduceBinOpExpr :: BinOp -> RedTypExpr -> RedTypExpr -> RedTypExpr
-reduceBinOpExpr And              e1 e2 = RedAnd          [e1, e2]
-reduceBinOpExpr Or               e1 e2 = RedOpNeg        $ RedAnd [RedOpNeg e1, RedOpNeg e2]
-reduceBinOpExpr Implication      e1 e2 = reduceBinOpExpr Or          (RedOpNeg e1)                         e2
-reduceBinOpExpr LessThan         e1 e2 = RedBinopExpr    RedLessThan e1                                    e2
-reduceBinOpExpr LessThanEqual    e1 e2 = reduceBinOpExpr Or          (RedBinopExpr RedLessThan e1 e2)      $ RedBinopExpr RedEqual e1 e2
-reduceBinOpExpr GreaterThan      e1 e2 = RedOpNeg        $ reduceBinOpExpr LessThanEqual e1 e2
-reduceBinOpExpr GreaterThanEqual e1 e2 = reduceBinOpExpr Or          (reduceBinOpExpr GreaterThan e1 e2)   $ RedBinopExpr RedEqual e1 e2
-reduceBinOpExpr Equal            e1 e2 = RedBinopExpr    RedEqual    e1                                    e2
-reduceBinOpExpr Minus            e1 e2 = RedBinopExpr    RedMinus    e1                                    e2
-reduceBinOpExpr Plus             e1 e2 = RedBinopExpr    RedPlus     e1                                    e2
-reduceBinOpExpr Multiply         e1 e2 = RedBinopExpr    RedMultiply e1                                    e2
-reduceBinOpExpr Divide           e1 e2 = RedBinopExpr    RedDivide   e1                                    e2
+instance Convertable BinOp Merge where
+    convert :: BinOp -> Merge
+    convert And              = \e1 e2 -> RedAnd [e1, e2]
+    convert Or               = \e1 e2 -> RedOpNeg $ RedAnd [RedOpNeg e1, RedOpNeg e2]
+    convert Implication      = (convert Or :: Merge) . RedOpNeg
+    convert LessThan         = RedBinopExpr RedLessThan
+    convert LessThanEqual    = \e1 e2 -> (convert Or :: Merge) (RedBinopExpr RedLessThan e1 e2) $ RedBinopExpr RedEqual e1 e2
+    convert GreaterThan      = \e1 e2 -> RedOpNeg $ (convert LessThanEqual :: Merge) e1 e2
+    convert GreaterThanEqual = \e1 e2 -> (convert Or :: Merge) (convert GreaterThan e1 e2) $ RedBinopExpr RedEqual e1 e2
+    convert Equal            = RedBinopExpr RedEqual
+    convert Minus            = RedBinopExpr RedMinus
+    convert Plus             = RedBinopExpr RedPlus
+    convert Multiply         = RedBinopExpr RedMultiply
+    convert Divide           = RedBinopExpr RedDivide
+
+instance Convertable RedTypExpr TypExpr where
+    convert :: RedTypExpr -> TypExpr
+    convert (RedVar       t  s    ) = Var       t                    s
+    convert (RedLitI      i       ) = LitI      i
+    convert (RedLitB      b       ) = LitB      b
+    convert (RedArrayElem e1 e2   ) = ArrayElem (convert e1) $ convert e2
+    convert (RedOpNeg     e       ) = OpNeg     $ convert e
+    convert (RedBinopExpr o  e1 e2) = BinopExpr (convert o)   (convert e1) $ convert e2
+    convert (RedAnd       (e:es)  ) = foldr (\i acc -> BinopExpr And acc $ convert i) (convert e) es
+    convert (RedAnd       []      ) = error "can not have empty and expression"
+    convert (RedForall    s  e    ) = Forall    s                    $ convert e
+    convert (RedExists    s  e    ) = Exists    s                    $ convert e
+    convert (RedSizeOf    e       ) = SizeOf    $ convert e
+    convert (RedRepBy     e1 e2 e3) = RepBy     (convert e1) (convert e2) $ convert e3
+    convert (RedCond      e1 e2 e3) = Cond      (convert e1) (convert e2) $ convert e3
 
 
-expandRedTypExp :: RedTypExpr -> TypExpr
-expandRedTypExp (RedVar       t  s    ) = Var       t                    s
-expandRedTypExp (RedLitI      i       ) = LitI      i
-expandRedTypExp (RedLitB      b       ) = LitB      b
-expandRedTypExp (RedArrayElem e1 e2   ) = ArrayElem (expandRedTypExp e1) $ expandRedTypExp e2
-expandRedTypExp (RedOpNeg     e       ) = OpNeg     $ expandRedTypExp e
-expandRedTypExp (RedBinopExpr o  e1 e2) = BinopExpr (expandRedBinOp o)   (expandRedTypExp e1) $ expandRedTypExp e2
-expandRedTypExp (RedAnd       (e:es)  ) = foldr (\i acc -> BinopExpr And acc $ expandRedTypExp i) (expandRedTypExp e) es
-expandRedTypExp (RedAnd       []      ) = error "can not have empty and expression"
-expandRedTypExp (RedForall    s  e    ) = Forall    s                    $ expandRedTypExp e
-expandRedTypExp (RedExists    s  e    ) = Exists    s                    $ expandRedTypExp e
-expandRedTypExp (RedSizeOf    e       ) = SizeOf    $ expandRedTypExp e
-expandRedTypExp (RedRepBy     e1 e2 e3) = RepBy     (expandRedTypExp e1) (expandRedTypExp e2) $ expandRedTypExp e3
-expandRedTypExp (RedCond      e1 e2 e3) = Cond      (expandRedTypExp e1) (expandRedTypExp e2) $ expandRedTypExp e3
-
-
-expandRedBinOp :: RedBinOp -> BinOp
-expandRedBinOp RedLessThan = LessThan
-expandRedBinOp RedEqual    = Equal
-expandRedBinOp RedMinus    = Minus
-expandRedBinOp RedPlus     = Plus
-expandRedBinOp RedMultiply = Multiply
-expandRedBinOp RedDivide   = Divide
+instance Convertable RedBinOp BinOp where
+    convert :: RedBinOp -> BinOp
+    convert RedLessThan = LessThan
+    convert RedEqual    = Equal
+    convert RedMinus    = Minus
+    convert RedPlus     = Plus
+    convert RedMultiply = Multiply
+    convert RedDivide   = Divide

@@ -52,5 +52,5 @@ expr1 = Parens (BinopExpr And
 test :: IO ()
 test = do
     print expr1
-    printLawTrace $ applyLawsTrace (reduceTypExp expr1) laws
+    printLawTrace $ applyLawsTrace (convert expr1) laws
 
