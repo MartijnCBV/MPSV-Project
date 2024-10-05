@@ -18,7 +18,7 @@ applyLawsTrace e ls = let e' = foldl applyLaw [e] ls
 applyLaw :: [RedTypExpr] -> Law -> [RedTypExpr]
 applyLaw es l | head es == e = es
               | otherwise    = e : es
-    where e = l $ head es 
+    where e = l $ head es
 
 
 laws :: [Law]
@@ -49,6 +49,8 @@ expr1 = Parens (BinopExpr And
         )
     )
 
+simplify :: TypedExpr -> TypedExpr
+simplify = convert . flip applyLaws laws . convert
 
 test :: IO ()
 test = do

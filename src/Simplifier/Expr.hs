@@ -34,38 +34,6 @@ data RedBinOp
     | RedMinus | RedPlus | RedMultiply | RedDivide
     deriving (Eq, Ord)
 
-
--- instance Show TypExpr where
---     show :: TypExpr -> String
---     show (Var       _  s        ) = s
---     show (LitI      i           ) = show i
---     show (LitB      b           ) = if b then "T" else "F"
---     show (Parens    e           ) = '(' : show e ++ ")"
---     show (ArrayElem e1 e2       ) = show e1 ++ '[' : show e2 ++ "]"
---     show (OpNeg     e           ) = "~" ++ show e
---     show (BinopExpr o  e1 e2    ) = '(' : show e1 ++ ' ' : show o ++ ' ' : show e2 ++ ")"
---     show (Forall    s  e        ) = "\\-/ " ++ show s ++ '(' : show e ++ ")"
---     show (Exists    s  e        ) = "E " ++ show s ++ '(' : show e ++ ")"
---     show (SizeOf    e           ) = "#(" ++ show e ++ ")"
---     show _                           = "undefined"
-
-
--- instance Show BinOp where
---     show :: BinOp -> String
---     show And              = "/\\"
---     show Or               = "\\/"
---     show Implication      = "=>"
---     show LessThan         = "<"
---     show LessThanEqual    = "<="
---     show GreaterThan      = ">"
---     show GreaterThanEqual = ">="
---     show Equal            = "="
---     show Minus            = "-"
---     show Plus             = "+"
---     show Multiply         = "*"
---     show Divide           = "/"
-
-
 instance Show RedTypExpr where
     show :: RedTypExpr -> String
     show (RedVar       _  s        ) = s
