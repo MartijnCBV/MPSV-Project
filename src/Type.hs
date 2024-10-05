@@ -4,9 +4,11 @@ import qualified GCLParser.GCLDatatype as GDT (
   Type,
   Expr(LitI, LitB, Var, Forall, Exists, BinopExpr, Parens, ArrayElem, OpNeg, SizeOf, RepBy, Cond),
   BinOp(And, Or, Implication, Minus, Plus, Multiply, Divide, LessThan, LessThanEqual, GreaterThan, GreaterThanEqual, Equal))
-import Data.Map (insert, Map, (!), empty)
+import Data.Map (insert, Map, lookup, empty)
 import GCLParser.GCLDatatype (Program (..), VarDeclaration (VarDeclaration), Stmt (Block), Type (PType), PrimitiveType (PTInt))
 import Traverse (traverseStmt)
+
+type Env = Map String GDT.Type
 
 data Op = And | Or | Implication
     | LessThan | LessThanEqual | GreaterThan | GreaterThanEqual | Equal
@@ -57,10 +59,15 @@ convertOp GDT.GreaterThanEqual = GreaterThanEqual
 convertOp GDT.Equal            = Equal
 convertOp _ = undefined
 
-annotateWithTypes :: Map String GDT.Type -> GDT.Expr -> TypedExpr
+getVar :: String -> Env -> GDT.Type
+getVar name env = case Data.Map.lookup name env of
+  Just typ -> typ
+  Nothing  -> error $ "Use of undeclared variable " ++ name
+
+annotateWithTypes :: Env -> GDT.Expr -> TypedExpr
 annotateWithTypes _ (GDT.LitI val)  = LitI val
 annotateWithTypes _ (GDT.LitB val)  = LitB val
-annotateWithTypes varTypes (GDT.Var name)  = Var name (varTypes ! name)
+annotateWithTypes varTypes (GDT.Var name)  = Var name (getVar name varTypes)
 annotateWithTypes varTypes (GDT.Parens op) = Parens $ annotateWithTypes varTypes op
 annotateWithTypes varTypes (GDT.OpNeg op)  = OpNeg $ annotateWithTypes varTypes op
 annotateWithTypes varTypes (GDT.SizeOf op) = SizeOf $ annotateWithTypes varTypes op
