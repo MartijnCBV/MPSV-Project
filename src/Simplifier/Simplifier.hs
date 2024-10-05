@@ -1,6 +1,7 @@
 module Simplifier.Simplifier where
 import Simplifier.Expr
 import Simplifier.Boolean
+import Type
 
 
 applyLaws :: RedTypExpr -> [Law] -> RedTypExpr
@@ -36,7 +37,7 @@ printLawTrace :: [RedTypExpr] -> IO ()
 printLawTrace es = mapM_ print $ reverse es
 
 
-expr1 :: TypExpr
+expr1 :: TypedExpr
 expr1 = Parens (BinopExpr And
         (BinopExpr Or
             (OpNeg (BinopExpr Implication (LitB True) (LitB False)))  -- not (True -> False)
