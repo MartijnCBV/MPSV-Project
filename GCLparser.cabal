@@ -28,6 +28,10 @@ library gclparser-lib
                      , Type
                      , Predicate.Solver
                      , Main
+                     , Simplifier.Simplifier
+                     , Simplifier.Expr
+                     , Simplifier.Boolean
+                     , Simplifier.Integer
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
