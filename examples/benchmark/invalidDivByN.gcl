@@ -9,6 +9,7 @@
 
 divByN(x:int | divisible:bool) {
   // N is an experiment parameter
+  // N=4
   assume x>1 ;
   var k:int {
     k := 1 ;
@@ -19,7 +20,7 @@ divByN(x:int | divisible:bool) {
       //       (exists m:: 0<m && m<k && m*N = x)  ;
       var i:int {
          i := 0 ;
-         while i<N do { // deliberate bug ... should i<N. Change: removing the bug.
+         while i<4 do { // deliberate bug ... should i<N. Change: removing the bug.
             i := i+1
          } ; // so, i = N
          divisible := i*k = x     // in other words, d := (N*k = x)
@@ -29,6 +30,6 @@ divByN(x:int | divisible:bool) {
   } ;
   // assert divisible = (exists m:: 0<m && m<=x && m*N = x)
   // deliberately invalid:
-  assert divisible = (exists m:: 0<m && m<=x && m*N = (x+1)*N)
+  assert divisible = (exists m:: 0<m && m<=x && m*4 = (x+1)*4)
 
 }
