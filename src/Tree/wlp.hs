@@ -1,6 +1,15 @@
-module Tree.Wlp where
+module Tree.Wlp (getWlp, getFeasibleWlp) where
 
 import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
+import Traverse (transformExpr)
+
+type Name = String
+type Value = Expr
+
+replace :: Name -> Value -> Expr -> Expr
+replace name value = transformExpr fillVar
+  where fillVar (Var n) | n == name = Just value
+        fillVar _                   = Nothing
 
 repBy :: (String -> Expr) -> String -> Expr -> Expr -> Expr
 repBy f s = RepBy (f s)
@@ -12,9 +21,9 @@ wlpBase :: (Stmt -> Expr -> Expr) -> Stmt -> Expr -> Expr
 wlpBase _ Skip                       expr = expr
 wlpBase recFunc assert@(Assert _)    expr = recFunc assert expr
 wlpBase recFunc assume@(Assume _)    expr = recFunc assume expr
-wlpBase _ (Assign s e)               expr = repBy Var s expr e
-wlpBase recFunc (AAssign s e1 e2)    expr = flip recFunc expr $ Assign s $ repBy Var s e1 e2
-wlpBase recFunc (Seq s1 s2)          expr = recFunc s1 $ recFunc s2 expr
+wlpBase _ (Assign s e)               expr = replace s e expr
+wlpBase recFunc (AAssign s e1 e2)    expr = flip (wlpBase recFunc) expr $ Assign s $ repBy Var s e1 e2
+wlpBase recFunc (Seq s1 s2)          expr = wlpBase recFunc s1 $ wlpBase recFunc s2 expr
 wlpBase _ _ _ = undefined
 -- these are unnecessary
 -- wlpBase _ (DrefAssign s e)           expr = repBy Dereference s expr e
@@ -23,8 +32,8 @@ wlpBase _ _ _ = undefined
 -- wlpBase _ (Block _ _)                expr = expr
 -- wlpBase _ (TryCatch {})              _    = error "try catch not supported by wlp"
 
-wlp :: Stmt -> Expr -> Expr
-wlp = wlpBase wlpRec
+normalWlp :: Stmt -> Expr -> Expr
+normalWlp = wlpBase wlpRec
   where wlpRec (Assert e) expr = opBinParens e opAnd expr
         wlpRec (Assume e) expr = opBinParens e opImplication expr
         wlpRec _ _ = error "unsupported"
@@ -34,3 +43,9 @@ feasibleWlp = wlpBase wlpRec
   where wlpRec (Assert _) expr = expr
         wlpRec (Assume e) expr = opBinParens e opAnd expr
         wlpRec _ _ = error "unsupported"
+
+getWlp :: Stmt -> Expr
+getWlp = flip normalWlp (LitB True)
+
+getFeasibleWlp :: Stmt -> Expr
+getFeasibleWlp = flip feasibleWlp (LitB True)
