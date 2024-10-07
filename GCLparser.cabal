@@ -23,9 +23,15 @@ library gclparser-lib
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
                      , Tree.ProgramPath
+                     , Tree.Wlp
                      , Traverse
                      , Type
                      , Predicate.Solver
+                     , Main
+                     , Simplifier.Simplifier
+                     , Simplifier.Expr
+                     , Simplifier.Boolean
+                     , Simplifier.Integer
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
