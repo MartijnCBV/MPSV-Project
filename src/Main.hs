@@ -8,32 +8,35 @@ import Z3.Monad
 import Predicate.Solver (assertPredicate)
 import Tree.Wlp (getWlp)
 
-type Example = ([(String, Maybe Integer)], [(String, Maybe Bool)])
+type Example = ([(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
-checkPath :: (Expr -> TypedExpr) -> ([String], [String]) -> Stmt -> IO (Result, [Maybe Integer], [Maybe Bool])
-checkPath annotate (intNames, boolNames) stmt = do
+checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Stmt -> IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
+checkPath annotate (intNames, boolNames, arrayNames) stmt = do
   -- negate precondition, so that a result of "Unsat" indicates
   -- that the formula is always true -> valid
   let precond = OpNeg (getWlp stmt)
-  evalZ3 (assertPredicate (annotate precond) intNames boolNames)
+  evalZ3 (assertPredicate (annotate precond) intNames boolNames arrayNames)
 
-checkPaths :: (Expr -> TypedExpr) -> ([String], [String]) -> [Stmt] -> IO (Either Example ())
-checkPaths annotate names@(intNames, boolNames) (stmt : stmts) = do
-  (result, intValues, boolValues) <- checkPath annotate names stmt
+checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> IO (Either Example ())
+checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
+  (result, intValues, boolValues, arrayValues) <- checkPath annotate names stmt
   case result of
-    Sat   -> return $ Left (zip intNames intValues, zip boolNames boolValues)
+    Sat   -> return $ Left (zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues)
     Unsat -> checkPaths annotate names stmts
     Undef -> error "Undef"
 checkPaths _ _ [] = return $ Right ()
 
-inputsOf :: Program -> ([String], [String])
-inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool inputs))
+inputsOf :: Program -> ([String], [String], [String])
+inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool inputs), map getName (filter isArray inputs))
   where inputs = input prgm
         isInt varDecl = case varDecl of
           VarDeclaration _ (PType PTInt) -> True
           _ -> False
         isBool varDecl = case varDecl of
           VarDeclaration _ (PType PTBool) -> True
+          _ -> False
+        isArray varDecl = case varDecl of
+          VarDeclaration _ (AType PTInt) -> True
           _ -> False
         getName (VarDeclaration name _) = name
 

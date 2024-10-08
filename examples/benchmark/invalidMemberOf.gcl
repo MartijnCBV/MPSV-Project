@@ -9,7 +9,7 @@
 memberOf(x:int, a:[]int | found:bool) {
    // N is an experiment parameter
    // N=4
-   assume #a>=4 && #a>=0
+   assume #a<=4 && #a>=0
           && (exists i:: 0<=i && i<#a && a[i]=x) ;
    var k:int {
      k := 0 ;
@@ -23,6 +23,6 @@ memberOf(x:int, a:[]int | found:bool) {
      // adding few more checks:
      // assert found && k>=0 && k=#a && k>=N
      // using a wrong assertion:
-     assert ~found && k>=0 && k=#a && k>=4
+     assert ~found && k>=0 && k=#a && k<=4
    }
 }
