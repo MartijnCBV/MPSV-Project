@@ -8,7 +8,8 @@ import Z3.Monad
 import Predicate.Solver (assertPredicate)
 import Tree.Wlp (getWlp)
 
-type Example = ([(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
+type Path = Stmt
+type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
 checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Stmt -> IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
 checkPath annotate (intNames, boolNames, arrayNames) stmt = do
@@ -21,7 +22,7 @@ checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] ->
 checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
   (result, intValues, boolValues, arrayValues) <- checkPath annotate names stmt
   case result of
-    Sat   -> return $ Left (zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues)
+    Sat   -> return $ Left (stmt, zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues)
     Unsat -> checkPaths annotate names stmts
     Undef -> error "Undef"
 checkPaths _ _ [] = return $ Right ()
