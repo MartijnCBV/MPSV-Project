@@ -1,4 +1,4 @@
-module Tree.Wlp (getWlp, getFeasibleWlp) where
+module Tree.Wlp (getWlp, feasibleWlp, getFeasibleWlp) where
 
 import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
 import Traverse (transformExpr)
@@ -25,12 +25,6 @@ wlpBase _ (Assign s e)               expr = replace s e expr
 wlpBase recFunc (AAssign s e1 e2)    expr = flip (wlpBase recFunc) expr $ Assign s $ repBy Var s e1 e2
 wlpBase recFunc (Seq s1 s2)          expr = wlpBase recFunc s1 $ wlpBase recFunc s2 expr
 wlpBase _ _ _ = undefined
--- these are unnecessary
--- wlpBase _ (DrefAssign s e)           expr = repBy Dereference s expr e
--- wlpBase recFunc (IfThenElse e s1 s2) expr = opBinParens (e `opAnd` recFunc s1 expr) opOr (OpNeg e `opAnd` recFunc s2 expr)
--- wlpBase _ (While _ _)                _    = error "while not supported by wlp"
--- wlpBase _ (Block _ _)                expr = expr
--- wlpBase _ (TryCatch {})              _    = error "try catch not supported by wlp"
 
 normalWlp :: Stmt -> Expr -> Expr
 normalWlp = wlpBase wlpRec

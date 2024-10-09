@@ -2,7 +2,8 @@ module Main where
 
 import GCLParser.Parser ( parseGCLfile )
 import Type (annotateForProgram, TypedExpr)
-import Tree.ProgramPath (extractPaths, listPaths)
+import Tree.ProgramPath (extractPaths)
+import Tree.Walk (pickPaths)
 import GCLParser.GCLDatatype
 import Z3.Monad
 import Predicate.Solver (assertPredicate)
@@ -41,15 +42,20 @@ inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool i
           _ -> False
         getName (VarDeclaration name _) = name
 
+checkTree :: (Integral n) => n -> Program -> Z3 (Either Example ())
+checkTree depth prgm = do
+  let inputs = inputsOf prgm
+  let annotate = annotateForProgram prgm
+  paths <- pickPaths annotate (extractPaths depth $ stmt prgm)
+  checkPaths annotate inputs paths
+
 checkProgram :: (Integral n) => n -> String -> IO (Either Example ())
 checkProgram depth path = do
   gcl <- parseGCLfile path
   prgm <- case gcl of
     Left err -> error err
     Right prgm -> pure prgm
-  let inputs = inputsOf prgm
-  let paths = listPaths $ extractPaths depth (stmt prgm)
-  checkPaths (annotateForProgram prgm) inputs paths
+  evalZ3 $ checkTree depth prgm
 
 main :: IO ()
 main = putStrLn "Hello world"

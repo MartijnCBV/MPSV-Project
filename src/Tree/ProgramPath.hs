@@ -16,13 +16,6 @@ instance (Show u, Show b) => Show (UniBinTree u b) where
   show :: UniBinTree u b -> String
   show = printTree 0
 
--- instance (Eq u, Eq b) => Eq (UniBinTree u b) where
---   (==) :: (Eq u, Eq b) => UniBinTree u b -> UniBinTree u b -> Bool
---   Leaf             == Leaf             = True
---   (Uni val1 rest1) == (Uni val2 rest2) = val1 == val2 && rest1 == rest2
---   (Bin val1 l1 r1) == (Bin val2 l2 r2) = val1 == val2 && l1 == l2 && r1 == r2
---   _                == _                = False
-
 printTree :: (Show u, Show b) => Int -> UniBinTree u b -> String
 printTree n Leaf               = replicate (n * 2) ' ' ++ "Leaf\n"
 printTree n (Uni u next)       = replicate (n * 2) ' ' ++ show u ++ "\n" ++ printTree n next
@@ -137,16 +130,6 @@ toMaybe (Left _)  = Nothing
 toList :: Maybe t -> [t]
 toList (Just x) = [x]
 toList Nothing  = []
-
-listPaths :: ControlPath -> [Stmt]
-listPaths Leaf = []
-listPaths (Uni stmt next) = prependStmt stmt (listPaths next)
-listPaths (Bin cond left right) =
-  prependStmt (Assume cond) (listPaths left) ++ prependStmt (Assume (OpNeg cond)) (listPaths right)
-
-prependStmt :: Stmt -> [Stmt] -> [Stmt]
-prependStmt stmt []    = [stmt]
-prependStmt stmt stmts = map (Seq stmt) stmts
 
 testExtract :: (Integral n) => n -> String -> IO (Maybe ControlPath)
 testExtract n file = do

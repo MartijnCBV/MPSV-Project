@@ -24,14 +24,15 @@ library gclparser-lib
                      , ExamplesOfSemanticFunction
                      , Tree.ProgramPath
                      , Tree.Wlp
-                     , Traverse
-                     , Type
+                     , Tree.Walk
                      , Predicate.Solver
-                     , Main
                      , Simplifier.Simplifier
                      , Simplifier.Expr
                      , Simplifier.Boolean
                      , Simplifier.Integer
+                     , Traverse
+                     , Type
+                     , Main
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
