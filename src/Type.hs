@@ -9,6 +9,7 @@ import GCLParser.GCLDatatype (Program (..), VarDeclaration (VarDeclaration), Stm
 import Traverse (traverseStmt)
 
 type Env = Map String GDT.Type
+type Annotate = GDT.Expr -> TypedExpr
 
 data Op = And | Or | Implication
     | LessThan | LessThanEqual | GreaterThan | GreaterThanEqual | Equal
@@ -95,5 +96,5 @@ toMap = foldr addToMap empty
 programVars :: Program -> Map String GDT.Type
 programVars prgm = toMap (input prgm ++ output prgm ++ collectVarDecls (stmt prgm))
 
-annotateForProgram :: Program -> (GDT.Expr -> TypedExpr)
+annotateForProgram :: Program -> Annotate
 annotateForProgram prgm = annotateWithTypes $ programVars prgm

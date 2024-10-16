@@ -2,7 +2,8 @@ module Main where
 
 import GCLParser.Parser ( parseGCLfile )
 import Type (annotateForProgram, TypedExpr)
-import Tree.ProgramPath (extractPaths, listPaths)
+import Tree.ProgramPath (extractPaths)
+import Tree.Walk (pickPaths)
 import GCLParser.GCLDatatype
 import Z3.Monad
 import Predicate.Solver (assertPredicate)
@@ -11,14 +12,14 @@ import Tree.Wlp (getWlp)
 type Path = Stmt
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
-checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Stmt -> IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
+checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Stmt -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
 checkPath annotate (intNames, boolNames, arrayNames) stmt = do
   -- negate precondition, so that a result of "Unsat" indicates
   -- that the formula is always true -> valid
   let precond = OpNeg (getWlp stmt)
-  evalZ3 (assertPredicate (annotate precond) intNames boolNames arrayNames)
+  assertPredicate (annotate precond) intNames boolNames arrayNames
 
-checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> IO (Either Example ())
+checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> Z3 (Either Example ())
 checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
   (result, intValues, boolValues, arrayValues) <- checkPath annotate names stmt
   case result of
@@ -41,15 +42,20 @@ inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool i
           _ -> False
         getName (VarDeclaration name _) = name
 
+checkTree :: (Integral n) => n -> Program -> Z3 (Either Example ())
+checkTree depth prgm = do
+  let inputs = inputsOf prgm
+  let annotate = annotateForProgram prgm
+  paths <- pickPaths annotate (extractPaths depth $ stmt prgm)
+  checkPaths annotate inputs paths
+
 checkProgram :: (Integral n) => n -> String -> IO (Either Example ())
 checkProgram depth path = do
   gcl <- parseGCLfile path
   prgm <- case gcl of
     Left err -> error err
     Right prgm -> pure prgm
-  let inputs = inputsOf prgm
-  let paths = listPaths $ extractPaths depth (stmt prgm)
-  checkPaths (annotateForProgram prgm) inputs paths
+  evalZ3 $ checkTree depth prgm
 
 main :: IO ()
 main = putStrLn "Hello world"
