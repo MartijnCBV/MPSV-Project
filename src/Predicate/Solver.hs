@@ -91,19 +91,19 @@ getArrayName (RepBy arrayVar _ _) = getArrayName arrayVar
 
 -- | BinOp options for toPredicate
 toBinOpPredicate :: Op -> Z3 AST -> Z3 AST -> Z3 AST
-toBinOpPredicate And              e1 e2 = mkWithASTList mkAnd e1 e2
-toBinOpPredicate Or               e1 e2 = mkWithASTList mkOr e1 e2
-toBinOpPredicate Implication      e1 e2 = mkWithASTPair mkImplies e1 e2
-toBinOpPredicate LessThan         e1 e2 = mkWithASTPair mkLt e1 e2
-toBinOpPredicate LessThanEqual    e1 e2 = mkWithASTPair mkLe e1 e2
-toBinOpPredicate GreaterThan      e1 e2 = mkWithASTPair mkGt e1 e2
-toBinOpPredicate GreaterThanEqual e1 e2 = mkWithASTPair mkGe e1 e2
-toBinOpPredicate Equal            e1 e2 = mkWithASTPair mkEq e1 e2
-toBinOpPredicate Minus            e1 e2 = mkWithASTList mkSub e1 e2
-toBinOpPredicate Plus             e1 e2 = mkWithASTList mkAdd e1 e2
-toBinOpPredicate Multiply         e1 e2 = mkWithASTList mkMul e1 e2
-toBinOpPredicate Divide           e1 e2 = mkWithASTPair mkDiv e1 e2
-toBinOpPredicate _                _  _  = error "not implemented"
+toBinOpPredicate And              = mkWithASTList mkAnd 
+toBinOpPredicate Or               = mkWithASTList mkOr 
+toBinOpPredicate Implication      = mkWithASTPair mkImplies 
+toBinOpPredicate LessThan         = mkWithASTPair mkLt 
+toBinOpPredicate LessThanEqual    = mkWithASTPair mkLe 
+toBinOpPredicate GreaterThan      = mkWithASTPair mkGt 
+toBinOpPredicate GreaterThanEqual = mkWithASTPair mkGe 
+toBinOpPredicate Equal            = mkWithASTPair mkEq 
+toBinOpPredicate Minus            = mkWithASTList mkSub 
+toBinOpPredicate Plus             = mkWithASTList mkAdd 
+toBinOpPredicate Multiply         = mkWithASTList mkMul 
+toBinOpPredicate Divide           = mkWithASTPair mkDiv 
+toBinOpPredicate _                = error "not implemented"
 
 -- | Pass 2 Z3 AST arguments as a list [AST] to func
 mkWithASTList ::  ([AST] -> Z3 AST) -> Z3 AST -> Z3 AST -> Z3 AST
@@ -125,10 +125,19 @@ assertPredicate expr intNames boolNames arrayNames = do
   predicate <- toPredicate expr
   assert predicate
   (sat, m) <- solverCheckAndGetModel
-  solverReset
   if isNothing m
-    then return (sat, [], [], [])
+    then do
+      solverReset
+      return (sat, [], [], [])
     else do
+      -- If SAT, evaluate array length and add var for each index under #a
+      foldr (\x xs -> do 
+        y <- x
+        ys <- xs
+        return (y:ys)) (return []) (map (linkArray m) arrayNames)
+      -- Solve again to evaluate array with new asserts
+      (sat, m) <- solverCheckAndGetModel
+
       -- Unnest type: [Z3 (Maybe Integer)] -> Z3 [Maybe Integer]
       intValues <- foldr (\int ints -> do 
         i <- int
@@ -141,12 +150,13 @@ assertPredicate expr intNames boolNames arrayNames = do
         ys <- xs
         return (y:ys)) (return []) (map (linkAndEvalBool m) boolNames)
 
-      -- Unnest type: [Z3 (Maybe Bool)] -> Z3 [Maybe Bool]
+      -- Unnest type: [Z3 (Maybe String)] -> Z3 [Maybe String]
       arrayValues <- foldr (\x xs -> do 
         y <- x
         ys <- xs
-        return (y:ys)) (return []) (map (linkAndEvalArray m) arrayNames)
+        return (y:ys)) (return []) (map (customEvalArray m) arrayNames)
 
+      solverReset
       return (sat, intValues, boolValues, arrayValues)
 
 -- | Evaluate integer based on name
@@ -165,10 +175,28 @@ linkAndEvalBool (Just model) str = do
   bool <- mkBoolVar symbol
   evalBool model bool
 
+-- | Assign vars to each index of an array based on length
+linkArray :: Maybe Model -> String -> Z3 ()
+linkArray Nothing      _   = return ()
+linkArray (Just model) name = do
+  maybeLength <- (evalInt model) =<< mkIntVar =<< mkStringSymbol ("#" ++ name)
+  arrayLength <- return $ fromMaybe 0 maybeLength
+
+  linkArrayIndices name [0..(arrayLength-1)]
+
+linkArrayIndices :: String -> [Integer] -> Z3 ()
+linkArrayIndices _    [] = return ()
+linkArrayIndices name (i:is) = do
+  rest <- linkArrayIndices name is
+  indexName <- return $ "#" ++ name ++ (show i)
+  assert =<< toPredicate (BinopExpr Equal 
+                         (Var indexName (PType PTInt)) 
+                         (ArrayElem (Var name (AType PTInt)) (LitI (fromIntegral i))))
+
 -- | Evaluate array based on name by assigning var to each index
-linkAndEvalArray :: Maybe Model -> String -> Z3 (Maybe String)
-linkAndEvalArray Nothing      _   = return Nothing
-linkAndEvalArray (Just model) name = do
+customEvalArray :: Maybe Model -> String -> Z3 (Maybe String)
+customEvalArray Nothing      _   = return Nothing
+customEvalArray (Just model) name = do
   maybeLength <- (evalInt model) =<< mkIntVar =<< mkStringSymbol ("#" ++ name)
   arrayLength <- return $ fromMaybe 0 maybeLength
 
@@ -180,9 +208,6 @@ evalArrayIndices _     _    [] = return []
 evalArrayIndices model name (i:is) = do
   rest <- evalArrayIndices model name is
   indexName <- return $ "#" ++ name ++ (show i)
-  assert =<< toPredicate (BinopExpr Equal 
-                         (Var indexName (PType PTInt)) 
-                         (ArrayElem (Var name (AType PTInt)) (LitI (fromIntegral i))))
   value <- (evalInt model) =<< mkIntVar =<< mkStringSymbol indexName
   return (value:rest)
 
