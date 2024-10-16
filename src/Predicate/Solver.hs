@@ -83,11 +83,13 @@ toArrayPredicate (Var name (AType PTInt)) _ = do
   intArrayType <- mkArraySort intType intType
   mkConst symbol intArrayType
 toArrayPredicate repby@(RepBy _ _ _) bound = _toPredicate repby bound
+toArrayPredicate expr                _     = error $ (show expr) ++ " is not an array"
 
 -- | Gets the name of an array Var or the nested array Var in a RepBy
 getArrayName :: TypedExpr -> String
 getArrayName (Var name (AType PTInt)) = name
-getArrayName (RepBy arrayVar _ _) = getArrayName arrayVar
+getArrayName (RepBy arrayVar _ _)     = getArrayName arrayVar
+getArrayName expr                     = error $ (show expr) ++ " is not an array"
 
 -- | BinOp options for toPredicate
 toBinOpPredicate :: Op -> Z3 AST -> Z3 AST -> Z3 AST
@@ -103,7 +105,6 @@ toBinOpPredicate Minus            = mkWithASTList mkSub
 toBinOpPredicate Plus             = mkWithASTList mkAdd 
 toBinOpPredicate Multiply         = mkWithASTList mkMul 
 toBinOpPredicate Divide           = mkWithASTPair mkDiv 
-toBinOpPredicate _                = error "not implemented"
 
 -- | Pass 2 Z3 AST arguments as a list [AST] to func
 mkWithASTList ::  ([AST] -> Z3 AST) -> Z3 AST -> Z3 AST -> Z3 AST
@@ -122,42 +123,46 @@ mkWithASTPair mkOperation e1 e2 = do
 -- | Evaluate if expression is satisfiable and with which values
 assertPredicate :: TypedExpr -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
 assertPredicate expr intNames boolNames arrayNames = do
-  predicate <- toPredicate expr
-  assert predicate
+  assert =<< toPredicate expr
   (sat, m) <- solverCheckAndGetModel
-  if isNothing m
-    then do
-      solverReset
-      return (sat, [], [], [])
-    else do
-      -- If SAT, evaluate array length and add var for each index under #a
-      foldr (\x xs -> do 
-        y <- x
-        ys <- xs
-        return (y:ys)) (return []) (map (linkArray m) arrayNames)
-      -- Solve again to evaluate array with new asserts
-      (sat, m) <- solverCheckAndGetModel
+  evaluateResult sat m intNames boolNames arrayNames
 
-      -- Unnest type: [Z3 (Maybe Integer)] -> Z3 [Maybe Integer]
-      intValues <- foldr (\int ints -> do 
-        i <- int
-        is <- ints
-        return (i:is)) (return []) (map (linkAndEvalInt m) intNames)
+evaluateResult :: Result -> Maybe Model -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
+evaluateResult result Nothing _        _         _          = do 
+  solverReset
+  return (result, [], [], [])
+evaluateResult result _       []       []        []         = do 
+  solverReset
+  return (result, [], [], [])
+evaluateResult _      m       intNames boolNames arrayNames = do
+  -- If SAT, evaluate array length and add var for each index under #a
+  _ <- foldr (\x xs -> do 
+    y <- x
+    ys <- xs
+    return (y:ys)) (return []) (map (linkArray m) arrayNames)
+  -- Solve again to evaluate array with new asserts
+  (sat, m) <- solverCheckAndGetModel
 
-      -- Unnest type: [Z3 (Maybe Bool)] -> Z3 [Maybe Bool]
-      boolValues <- foldr (\x xs -> do 
-        y <- x
-        ys <- xs
-        return (y:ys)) (return []) (map (linkAndEvalBool m) boolNames)
+  -- Unnest type: [Z3 (Maybe Integer)] -> Z3 [Maybe Integer]
+  intValues <- foldr (\int ints -> do 
+    i <- int
+    is <- ints
+    return (i:is)) (return []) (map (linkAndEvalInt m) intNames)
 
-      -- Unnest type: [Z3 (Maybe String)] -> Z3 [Maybe String]
-      arrayValues <- foldr (\x xs -> do 
-        y <- x
-        ys <- xs
-        return (y:ys)) (return []) (map (customEvalArray m) arrayNames)
+  -- Unnest type: [Z3 (Maybe Bool)] -> Z3 [Maybe Bool]
+  boolValues <- foldr (\x xs -> do 
+    y <- x
+    ys <- xs
+    return (y:ys)) (return []) (map (linkAndEvalBool m) boolNames)
 
-      solverReset
-      return (sat, intValues, boolValues, arrayValues)
+  -- Unnest type: [Z3 (Maybe String)] -> Z3 [Maybe String]
+  arrayValues <- foldr (\x xs -> do 
+    y <- x
+    ys <- xs
+    return (y:ys)) (return []) (map (customEvalArray m) arrayNames)
+
+  solverReset
+  return (sat, intValues, boolValues, arrayValues)
 
 -- | Evaluate integer based on name
 linkAndEvalInt :: Maybe Model -> String -> Z3 (Maybe Integer)
@@ -181,13 +186,12 @@ linkArray Nothing      _   = return ()
 linkArray (Just model) name = do
   maybeLength <- (evalInt model) =<< mkIntVar =<< mkStringSymbol ("#" ++ name)
   arrayLength <- return $ fromMaybe 0 maybeLength
-
   linkArrayIndices name [0..(arrayLength-1)]
 
 linkArrayIndices :: String -> [Integer] -> Z3 ()
 linkArrayIndices _    [] = return ()
 linkArrayIndices name (i:is) = do
-  rest <- linkArrayIndices name is
+  linkArrayIndices name is
   indexName <- return $ "#" ++ name ++ (show i)
   assert =<< toPredicate (BinopExpr Equal 
                          (Var indexName (PType PTInt)) 
@@ -199,7 +203,6 @@ customEvalArray Nothing      _   = return Nothing
 customEvalArray (Just model) name = do
   maybeLength <- (evalInt model) =<< mkIntVar =<< mkStringSymbol ("#" ++ name)
   arrayLength <- return $ fromMaybe 0 maybeLength
-
   values <- evalArrayIndices model name [0..(arrayLength-1)]
   return (Just ((show values) ++ " length: " ++ (show arrayLength)))
 
