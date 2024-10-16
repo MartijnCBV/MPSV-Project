@@ -12,14 +12,14 @@ import Tree.Wlp (getWlp)
 type Path = Stmt
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
-checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Stmt -> IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
+checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Stmt -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
 checkPath annotate (intNames, boolNames, arrayNames) stmt = do
   -- negate precondition, so that a result of "Unsat" indicates
   -- that the formula is always true -> valid
   let precond = OpNeg (getWlp stmt)
-  evalZ3 (assertPredicate (annotate precond) intNames boolNames arrayNames)
+  assertPredicate (annotate precond) intNames boolNames arrayNames
 
-checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> IO (Either Example ())
+checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> Z3 (Either Example ())
 checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
   (result, intValues, boolValues, arrayValues) <- checkPath annotate names stmt
   case result of
