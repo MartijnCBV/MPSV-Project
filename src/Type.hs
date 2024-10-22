@@ -5,7 +5,7 @@ import qualified GCLParser.GCLDatatype as GDT (
   Expr(LitI, LitB, Var, Forall, Exists, BinopExpr, Parens, ArrayElem, OpNeg, SizeOf, RepBy, Cond),
   BinOp(And, Or, Implication, Minus, Plus, Multiply, Divide, LessThan, LessThanEqual, GreaterThan, GreaterThanEqual, Equal))
 import Data.Map (insert, Map, lookup, empty)
-import GCLParser.GCLDatatype (Program (..), VarDeclaration (VarDeclaration), Stmt (Block), Type (PType), PrimitiveType (PTInt))
+import GCLParser.GCLDatatype (Program (..), VarDeclaration (VarDeclaration), Stmt (Block, TryCatch), Type (PType), PrimitiveType (PTInt))
 import Traverse (traverseStmt)
 
 type Env = Map String GDT.Type
@@ -87,6 +87,7 @@ addQuantifierVar name = insert name (PType PTInt)
 collectVarDecls :: Stmt -> [VarDeclaration]
 collectVarDecls = traverseStmt getVarDecls
   where getVarDecls (Block vardecl _) = vardecl
+        getVarDecls (TryCatch err _ _) = [VarDeclaration err (PType PTInt)]
         getVarDecls _ = []
 
 toMap :: [VarDeclaration] -> Map String GDT.Type

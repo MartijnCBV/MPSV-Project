@@ -94,7 +94,7 @@ extractPaths' n (while@(While cond body), handles) =
 
 extractPaths' n (TryCatch _ try catch, handles) = extractPaths' n ((catch : handles) $+> try)
 
-extractPaths' n (Seq (Block _ stmt1) stmt2, handles) = extractPaths' n (handles $+> (stmt1 +: stmt2))
+extractPaths' n (Seq (Block _ stmt1) stmt2, handles) = extractPaths' n (handles $+> stmt1 +: stmt2)
 
 -- append statements following an if-then-else to both branches
 extractPaths' n (Seq (IfThenElse cond thenStmt elseStmt) stmt, handles) =
@@ -104,7 +104,7 @@ extractPaths' n (Seq (IfThenElse cond thenStmt elseStmt) stmt, handles) =
 
 extractPaths' n (while@(Seq (While cond body) stmt), handles) =
   catchException n (errorsOn cond) (Bin cond whilePaths exitPaths) handles
-  where whilePaths = extractPaths' (n - 1) (handles $+> (body +: while))
+  where whilePaths = extractPaths' (n - 1) (handles $+> body +: while)
         exitPaths  = extractPaths' (n - 1) (handles $+> stmt)
 
 extractPaths' n (Seq (TryCatch _ try catch) stmt, handles) =
