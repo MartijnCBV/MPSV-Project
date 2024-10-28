@@ -6,12 +6,16 @@ import GCLParser.GCLDatatype
 import Type (Annotate)
 import Z3.Monad (Z3, Result (Sat, Unsat, Undef))
 
--- simplest walk: list all paths
+-- simplest walk: list all complete paths
 listPaths :: ControlPath -> [Stmt]
-listPaths Leaf = []
-listPaths (Uni stmt next) = prependStmt stmt (listPaths next)
-listPaths (Bin cond left right) =
+listPaths (Uni (stmt, End) next) = prependStmt stmt (listPaths next)
+listPaths (Bin (cond, End, End) left right) =
   prependStmt (Assume cond) (listPaths left) ++ prependStmt (Assume (OpNeg cond)) (listPaths right)
+listPaths (Bin (cond, End, _) left _) =
+  prependStmt (Assume cond) (listPaths left)
+listPaths (Bin (cond, _, End) _ right) =
+  prependStmt (Assume (OpNeg cond)) (listPaths right)
+listPaths _ = []
 
 prependStmt :: Stmt -> [Stmt] -> [Stmt]
 prependStmt stmt []    = [stmt]
@@ -26,11 +30,20 @@ when encountering branch
   add branch condition (or negation thereof) to conjunctive wlp
   branch is feasible iff this new conjunctive wlp is sat
 -}
--- issue: need to put *all* paths in list, not just last one
 walkPaths :: Annotate -> Expr -> ControlPath -> Z3 [Stmt]
-walkPaths _        _      Leaf                  = pure []
-walkPaths annotate curWlp (Uni stmt next)       = prependStmt' stmt $ walkPaths annotate (feasibleWlp stmt curWlp) next
-walkPaths annotate curWlp (Bin cond true false) = do
+walkPaths _ _ (Leaf _) = pure []
+
+-- prune unfinished branches
+walkPaths _        _      (Uni (_, Unfin) _) = pure []
+walkPaths annotate curWlp (Bin (cond, Unfin, _) true _) =
+  prependStmt' stmt $ walkPaths annotate (feasibleWlp stmt curWlp) true
+  where stmt = Assume (OpNeg cond)
+walkPaths annotate curWlp (Bin (cond, _, Unfin) _ false) =
+  prependStmt' stmt $ walkPaths annotate (feasibleWlp stmt curWlp) false
+  where stmt = Assume cond
+
+walkPaths annotate curWlp (Uni (stmt, _) next) = prependStmt' stmt $ walkPaths annotate (feasibleWlp stmt curWlp) next
+walkPaths annotate curWlp (Bin (cond, _, _) true false) = do
   let wlp = flip feasibleWlp curWlp
   let trueStmt = Assume cond
   let falseStmt = Assume (OpNeg cond)
