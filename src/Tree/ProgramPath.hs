@@ -29,9 +29,11 @@ binTerm cond true false = Bin (cond, term true, term false) true false
 instance Ord Terminal where
   (<=) :: Terminal -> Terminal -> Bool
   -- order: End > Except > Unfin
-  _ <= End    = True
-  _ <= Except = True
-  _ <= Unfin  = True
+  term1 <= term2 = number term1 <= number term2
+                 where number :: Terminal -> Int
+                       number End = 3
+                       number Except = 2
+                       number Unfin = 1
 
 instance (Show l, Show u, Show b) => Show (UniBinTree l u b) where
   show :: UniBinTree l u b -> String
@@ -47,9 +49,6 @@ printTree n (Bin b left right) = replicate (n * 2) ' ' ++ show b ++ "\n" ++ inde
 (Seq lstmt1 lstmt2) +: rstmt =
   Seq lstmt1 (lstmt2 +: rstmt)
 lstmt +: rstmt         = Seq lstmt rstmt
-
-controlLeaf :: Stmt -> ControlPath
-controlLeaf stmt = Uni (stmt, Unfin) (Leaf Unfin)
 
 extractPaths :: (Integral n) => n -> Stmt -> ControlPath
 extractPaths n stmt = extractPaths' n ([] $+> stmt)
@@ -92,16 +91,16 @@ catchException n (Just cond) continue (catch : handles) = binTerm cond handle co
   where handle = extractPaths' (n - 1) (handles $+> catch)
 
 extractPaths' :: (Integral n) => n -> (Stmt, [Stmt]) -> ControlPath
-extractPaths' 0 _                       = Leaf End
-extractPaths' _ (stmt@Skip, _)          = controlLeaf stmt
-extractPaths' _ (stmt@(Assert {}), _)   = controlLeaf stmt
-extractPaths' _ (stmt@(Assume {}), _)   = controlLeaf stmt
+extractPaths' 0 _                       = Leaf Unfin
+extractPaths' _ (stmt@Skip, _)          = Uni (stmt, End) (Leaf End)
+extractPaths' _ (stmt@(Assert {}), _)   = Uni (stmt, End) (Leaf End)
+extractPaths' _ (stmt@(Assume {}), _)   = Uni (stmt, End) (Leaf End)
 extractPaths' n (Block _ stmt, handles) = extractPaths' n (handles $+> stmt)
 
-extractPaths' n (stmt@(Assign _ expr), handles) = catchException n (errorsOn expr) (controlLeaf stmt) handles
+extractPaths' n (Assign _ expr, handles) = catchException n (errorsOn expr) (Leaf End) handles
 
-extractPaths' n (stmt@(AAssign array index expr), handles) =
-  catchException n errorCond (controlLeaf stmt) handles
+extractPaths' n (AAssign array index expr, handles) =
+  catchException n errorCond (Leaf End) handles
   -- index out of bounds exception when assigning to index out of bounds
   where errorCond = Just $ disjunct $ indexOOB (Var array) index : toList (errorsOn expr)
 
