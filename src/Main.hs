@@ -11,6 +11,8 @@ import Predicate.Solver (assertPredicate)
 import Tree.Wlp (getWlp)
 import Stats
 import Traverse (traverseExpr)
+import System.TimeIt
+import Options.Applicative
 
 type Path = Stmt
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
@@ -68,17 +70,64 @@ checkTree depth prgm = do
   let inputs = inputsOf prgm
   let annotate = annotateForProgram prgm
   let tree = extractPaths depth $ stmt prgm
-  (paths, stats) <- pickPaths annotate tree-- `debug` show tree
+  (paths, stats) <- pickPaths annotate tree
   (res, totalSize) <- checkPaths annotate inputs paths
   return (res, stats { totalSize = totalSize })
 
-checkProgram :: (Integral n) => n -> String -> IO (Either Example (), Stats)
-checkProgram depth filePath = do
+checkProgram :: Config -> IO (Either Example (), Stats)
+checkProgram (Config filePath depth) = do
   gcl <- parseGCLfile filePath
   prgm <- case gcl of
     Left err -> error err
     Right prgm -> pure prgm
   evalZ3 $ checkTree depth prgm
 
+cp :: Int -> String -> IO (Either Example (), Stats)
+cp n file = checkProgram (Config file n)
+
+data Config = Config {
+  file :: String,
+  depth :: Int
+}
+
+config :: Parser Config
+config = Config
+      <$> argument str
+          ( metavar "FILE"
+         <> help "File to verify" )
+      <*> option auto
+          ( long "depth"
+         <> short 'd'
+         <> help "Depth to verify to"
+         <> showDefault
+         <> value 10
+         <> metavar "INT" )
+
+printValues :: (Show a) => [(String, Maybe a)] -> IO ()
+printValues []                        = pure ()
+printValues ((_, Nothing) : rest)     = printValues rest
+printValues ((name, Just val) : rest) = do putStrLn $ concat [name, " = ", show val]; printValues rest
+
+printExample :: Example -> IO ()
+printExample (_, intValues, boolValues, arrayValues) = do
+  putStrLn "Found counterexample for inputs:"
+  printValues intValues
+  printValues boolValues
+  printValues arrayValues
+  return ()
+
 main :: IO ()
-main = putStrLn "Hello world"
+main = do
+  (time, (result, Stats nodes paths unfins infeasibles size)) <- timeItT $ checkProgram =<< execParser opts
+  putStrLn $ concat ["Inspected ", show nodes, " nodes in ", show paths, " paths"]
+  putStrLn $ concat ["Pruned ", show unfins, " incomplete paths and ", show infeasibles, " infeasible paths"]
+  putStrLn $ concat ["Verified formulas with total size of ", show size, "\nTook ", show time, " seconds"]
+  case result of
+    Left err -> printExample err
+    Right () -> putStrLn "Program is valid"
+  return ()
+  where
+    opts = info (config <**> helper)
+      ( fullDesc
+     <> progDesc "Verify program described in FILE"
+     <> header "Bounded Symbolic Verification" )

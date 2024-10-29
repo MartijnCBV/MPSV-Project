@@ -2,7 +2,6 @@
 module Tree.ProgramPath where
 
 import GCLParser.GCLDatatype
-import GCLParser.Parser ( parseGCLfile )
 import Traverse
 
 data UniBinTree l u b = Leaf l
@@ -153,8 +152,3 @@ toMaybe (Left _)  = Nothing
 toList :: Maybe t -> [t]
 toList (Just x) = [x]
 toList Nothing  = []
-
-testExtract :: (Integral n) => n -> String -> IO (Maybe ControlPath)
-testExtract n file = do
-  gcl <- parseGCLfile file
-  return $ fmap (extractPaths n . stmt) (toMaybe gcl)
