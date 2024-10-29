@@ -32,14 +32,17 @@ normalWlp = wlpBase wlpRec
         wlpRec (Assume e) expr = opBinParens e opImplication expr
         wlpRec _ _ = error "unsupported"
 
-feasibleWlp :: Stmt -> Expr -> Expr
-feasibleWlp = wlpBase wlpRec
-  where wlpRec (Assert _) expr = expr
-        wlpRec (Assume e) expr = opBinParens e opAnd expr
-        wlpRec _ _ = error "unsupported"
+feasibleWlp :: [Stmt] -> Expr
+feasibleWlp (Skip : rest)              = feasibleWlp rest
+feasibleWlp ((Assert _) : rest)        = feasibleWlp rest
+feasibleWlp ((Assume e) : rest)        = opBinParens e opAnd (feasibleWlp rest)
+feasibleWlp ((Assign s e) : rest)      = replace s e (feasibleWlp rest)
+feasibleWlp ((AAssign s e1 e2) : rest) = feasibleWlp $ Assign s (repBy Var s e1 e2) : rest
+feasibleWlp [] = LitB True
+feasibleWlp _ = undefined
 
 getWlp :: Stmt -> Expr
 getWlp = flip normalWlp (LitB True)
 
-getFeasibleWlp :: Stmt -> Expr
-getFeasibleWlp = flip feasibleWlp (LitB True)
+getFeasibleWlp :: [Stmt] -> Expr
+getFeasibleWlp = feasibleWlp . reverse

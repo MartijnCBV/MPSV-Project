@@ -75,18 +75,16 @@ checkTree depth prgm = do
   return (res, stats { totalSize = totalSize })
 
 checkProgram :: Config -> IO (Either Example (), Stats)
-checkProgram (Config filePath depth) = do
+checkProgram (Config filePath _ depth) = do
   gcl <- parseGCLfile filePath
   prgm <- case gcl of
     Left err -> error err
     Right prgm -> pure prgm
   evalZ3 $ checkTree depth prgm
 
-cp :: Int -> String -> IO (Either Example (), Stats)
-cp n file = checkProgram (Config file n)
-
 data Config = Config {
   file :: String,
+  csv :: Bool,
   depth :: Int
 }
 
@@ -95,6 +93,9 @@ config = Config
       <$> argument str
           ( metavar "FILE"
          <> help "File to verify" )
+      <*> switch
+          ( long "csv"
+         <> help "Print in CSV format")
       <*> option auto
           ( long "depth"
          <> short 'd'
@@ -116,15 +117,24 @@ printExample (_, intValues, boolValues, arrayValues) = do
   printValues arrayValues
   return ()
 
-main :: IO ()
-main = do
-  (time, (result, Stats nodes paths unfins infeasibles size)) <- timeItT $ checkProgram =<< execParser opts
+printOut :: Bool -> Double -> Stats -> IO ()
+printOut False time (Stats nodes paths unfins infeasibles size) = do
   putStrLn $ concat ["Inspected ", show nodes, " nodes in ", show paths, " paths"]
   putStrLn $ concat ["Pruned ", show unfins, " incomplete paths and ", show infeasibles, " infeasible paths"]
   putStrLn $ concat ["Verified formulas with total size of ", show size, "\nTook ", show time, " seconds"]
-  case result of
-    Left err -> printExample err
-    Right () -> putStrLn "Program is valid"
+printOut True time (Stats nodes paths unfins infeasibles size) =
+  putStrLn $ concat [show time, ",", show size, ",", show nodes, ",", show paths, ",", show unfins, ",", show infeasibles]
+
+main :: IO ()
+main = do
+  cfg <- execParser opts
+  (time, (result, stats)) <- timeItT $ checkProgram cfg
+  let printCsv = csv cfg
+  printOut printCsv time stats
+  case (printCsv, result) of
+    (True, _) -> pure ()
+    (_, Left err) -> printExample err
+    (_, Right ()) -> putStrLn "Program is valid"
   return ()
   where
     opts = info (config <**> helper)
