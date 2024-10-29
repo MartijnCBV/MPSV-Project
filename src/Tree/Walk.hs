@@ -6,6 +6,7 @@ import GCLParser.GCLDatatype
 import Type (Annotate)
 import Z3.Monad (Z3, Result (Sat, Unsat, Undef))
 import Stats
+import Control.Applicative
 
 -- simplest walk: list all complete paths
 listPaths :: ControlPath -> [Stmt]
@@ -41,46 +42,32 @@ walkPaths _ _ (Leaf _) = pure ([], emptyStats)
 
 -- prune unfinished branches
 walkPaths _        _      (Uni (_, Unfin) _) = pure ([], unfin emptyStats)
-walkPaths annotate curWlp (Bin (cond, Unfin, _) true _) = walk annotate (node . unfin) curWlp (Assume cond) true
-walkPaths annotate curWlp (Bin (cond, _, Unfin) _ false) = walk annotate (node . unfin) curWlp (Assume $ OpNeg cond) false
+walkPaths annotate curWlp (Bin (cond, _, Unfin) true _) = walk annotate (node . path . unfin) curWlp (Assume cond) true
+walkPaths annotate curWlp (Bin (cond, Unfin, _) _ false) = walk annotate (node . path . unfin) curWlp (Assume $ OpNeg cond) false
 
 walkPaths annotate curWlp (Uni (stmt, _) next) = walk annotate node curWlp stmt next
-walkPaths annotate curWlp (Bin (cond, _, _) true false) = do
-  let walkAnno = walk annotate
-  let updateStats = node . path
-  let trueStmt = Assume cond
-  let falseStmt = Assume (OpNeg cond)
-  let trueWlp  = feasibleWlp trueStmt curWlp
-  let falseWlp = feasibleWlp falseStmt curWlp
-  trueFeasible <- isFeasible annotate trueWlp
-  if trueFeasible
-  then do
-    (truePaths, trueStats) <- walkAnno id curWlp trueStmt true
-    falseFeasible <- isFeasible annotate falseWlp
-    if falseFeasible
-    then do
-      (falsePaths, falseStats) <- walkAnno id curWlp falseStmt false
-      return (truePaths ++ falsePaths, updateStats trueStats +++ falseStats)
-    else return (truePaths, updateStats $ infeasible trueStats)
-  -- if true branch is infeasible, we know that false branch must be feasible
-  -- we also prune true branch in this case
-  else walkAnno (updateStats . infeasible) curWlp trueStmt true
+walkPaths annotate curWlp (Bin (cond, _, _) true false) =
+  feasible (feasibleWlp trueStmt curWlp) branchTT branchFT
+  -- should work but doesn't for some reason and i've spent >2 hours on this now so fuck it
+  -- feasible (feasibleWlp trueStmt curWlp) (\_ -> feasible (feasibleWlp falseStmt curWlp) branchTT branchTF) branchFT
+  where feasible = isFeasible annotate
+        trueStmt = Assume cond
+        falseStmt = Assume (OpNeg cond)
+        branchFT _ = walk annotate (node . path . infeasible) curWlp falseStmt false
+        -- branchTF _ = walk annotate (node . path . infeasible) curWlp trueStmt true
+        branchTT _ = liftA2 mergePaths (walk annotate id curWlp trueStmt true) (walk annotate id curWlp falseStmt false)
 
-prependStmt' :: Stmt -> Z3 [Stmt] -> Z3 [Stmt]
-prependStmt' stmt zStmts = do
-  prependStmt stmt <$> zStmts
+mergePaths :: ([Stmt], Stats) -> ([Stmt], Stats) -> ([Stmt], Stats)
+mergePaths (paths1, stats1) (paths2, stats2) = (paths1 ++ paths2, (node . path) stats1 +++ stats2)
 
-isFeasible :: Annotate -> Expr -> Z3 Bool
-isFeasible _        (LitB True) = pure True
-isFeasible annotate wlp         = do
+isFeasible :: Annotate -> Expr -> (() -> Z3 ([Stmt], Stats)) -> (() -> Z3 ([Stmt], Stats)) -> Z3 ([Stmt], Stats)
+isFeasible _        (LitB True) true _     = true ()
+isFeasible annotate wlp         true false = do
   (result, _, _, _) <- assertPredicate (annotate wlp) [] [] []
-  return $ case result of
+  case result of
     Undef -> error "Undef"
-    Unsat -> False
-    Sat   -> True
-
-combine :: (Monad m) => (a -> a -> a) -> m a -> m a -> m a
-combine comb ma1 ma2 = do a1 <- ma1; comb a1 <$> ma2
+    Unsat -> false ()
+    Sat   -> true ()
 
 pickPaths :: Annotate -> ControlPath -> Z3 ([Stmt], Stats)
 pickPaths annotate = walkPaths annotate (LitB True)
