@@ -1,7 +1,8 @@
-module Tree.Wlp (getWlp, feasibleWlp, getFeasibleWlp) where
+module Tree.Wlp (getWlp, getFeasibleWlp) where
 
 import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
 import Traverse (transformExpr)
+import Tree.Data
 
 type Name = String
 type Value = Expr
@@ -11,35 +12,32 @@ replace name value = transformExpr fillVar
   where fillVar (Var n) | n == name = Just value
         fillVar _                   = Nothing
 
-repBy :: (String -> Expr) -> String -> Expr -> Expr -> Expr
-repBy f s = RepBy (f s)
-
 opBinParens :: Expr -> (Expr -> Expr -> Expr) -> Expr -> Expr
 opBinParens e1 f e2 = Parens e1 `f` Parens e2
 
-wlpBase :: (Stmt -> Expr -> Expr) -> Stmt -> Expr -> Expr
-wlpBase _ Skip                       expr = expr
-wlpBase recFunc assert@(Assert _)    expr = recFunc assert expr
-wlpBase recFunc assume@(Assume _)    expr = recFunc assume expr
-wlpBase _ (Assign s e)               expr = replace s e expr
-wlpBase recFunc (AAssign s e1 e2)    expr = flip (wlpBase recFunc) expr $ Assign s $ repBy Var s e1 e2
-wlpBase recFunc (Seq s1 s2)          expr = wlpBase recFunc s1 $ wlpBase recFunc s2 expr
-wlpBase _ _ _ = undefined
+validWlp :: [Step] -> Expr
+validWlp (Left Skip : rest)                = validWlp rest
+validWlp (Left ((Assert e)) : rest)        = opBinParens e opAnd (validWlp rest)
+validWlp (Left ((Assume e)) : rest)        = opBinParens e opImplication (validWlp rest)
+validWlp (Left ((Assign s e)) : rest)      = replace s e (validWlp rest)
+validWlp (Left ((AAssign s e1 e2)) : rest) = validWlp $ Left (Assign s (RepBy (Var s) e1 e2)) : rest
+validWlp (branching@(Right _) : rest)      = validWlp $ Left (getStmt branching) : rest
+validWlp [] = LitB True
+validWlp _ = undefined
 
-normalWlp :: Stmt -> Expr -> Expr
-normalWlp = wlpBase wlpRec
-  where wlpRec (Assert e) expr = opBinParens e opAnd expr
-        wlpRec (Assume e) expr = opBinParens e opImplication expr
-        wlpRec _ _ = error "unsupported"
+feasibleWlp :: [Stmt] -> Expr
+feasibleWlp (Skip : rest)              = feasibleWlp rest
+feasibleWlp ((Assert _) : rest)        = feasibleWlp rest
+feasibleWlp ((Assume e) : rest)        = opBinParens e opAnd (feasibleWlp rest)
+feasibleWlp ((Assign s e) : rest)      = replace s e (feasibleWlp rest)
+feasibleWlp ((AAssign s e1 e2) : rest) = feasibleWlp $ Assign s (RepBy (Var s) e1 e2) : rest
+feasibleWlp [] = LitB True
+feasibleWlp _ = undefined
 
-feasibleWlp :: Stmt -> Expr -> Expr
-feasibleWlp = wlpBase wlpRec
-  where wlpRec (Assert _) expr = expr
-        wlpRec (Assume e) expr = opBinParens e opAnd expr
-        wlpRec _ _ = error "unsupported"
+-- validity wlp arrives in forward (front-to-back) order
+getWlp :: [Step] -> Expr
+getWlp = validWlp
 
-getWlp :: Stmt -> Expr
-getWlp = flip normalWlp (LitB True)
-
-getFeasibleWlp :: Stmt -> Expr
-getFeasibleWlp = flip feasibleWlp (LitB True)
+-- feasibility wlp arrives in reverse (back-to-front) order, so reverse it
+getFeasibleWlp :: Step -> [Stmt] -> Expr
+getFeasibleWlp step prefix = (feasibleWlp . reverse) (getStmt step : prefix)

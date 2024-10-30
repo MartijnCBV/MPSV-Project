@@ -5,9 +5,10 @@
 // Bubble sort.
 
 // N is an experiment parameter; replace it with a concrete value.
+// N=4
 
 bsort( a : []int | b : []int) {
-  assume #a>=0 && #a>=N ;
+  assume #a>=0 && #a<=4 ;
   var k:int {
     k := 0 ;
     // inv of outer loop

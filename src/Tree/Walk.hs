@@ -1,21 +1,25 @@
 module Tree.Walk where
 import Predicate.Solver (assertPredicate)
-import Tree.Wlp (feasibleWlp)
-import Tree.ProgramPath
+import Tree.Wlp (getFeasibleWlp)
 import GCLParser.GCLDatatype
 import Type (Annotate)
 import Z3.Monad (Z3, Result (Sat, Unsat, Undef))
+import Stats
+import Control.Applicative
+import Tree.Data
 
--- simplest walk: list all paths
-listPaths :: ControlPath -> [Stmt]
-listPaths Leaf = []
-listPaths (Uni stmt next) = prependStmt stmt (listPaths next)
-listPaths (Bin cond left right) =
-  prependStmt (Assume cond) (listPaths left) ++ prependStmt (Assume (OpNeg cond)) (listPaths right)
+-- simplest walk: list all complete paths
+-- listPaths :: ControlPath -> [Path]
+-- listPaths (Uni stmt next) = prependStmt stmt (listPaths next)
+-- listPaths (Bin cond left right) =
+--   prependStmt (Assume cond) (listPaths left) ++ prependStmt (Assume (OpNeg cond)) (listPaths right)
+--   where branchTo = branch 
+-- listPaths (Leaf Unfin) = []
+-- listPaths (Leaf term) = [([], term)]
 
-prependStmt :: Stmt -> [Stmt] -> [Stmt]
-prependStmt stmt []    = [stmt]
-prependStmt stmt stmts = map (Seq stmt) stmts
+prependStmt :: Step -> [Path] -> [Path]
+prependStmt stmt ((stmts, term) : rest) = (stmt : stmts, term) : prependStmt stmt rest
+prependStmt _ [] = []
 
 {-
 keep track of
@@ -26,41 +30,39 @@ when encountering branch
   add branch condition (or negation thereof) to conjunctive wlp
   branch is feasible iff this new conjunctive wlp is sat
 -}
--- issue: need to put *all* paths in list, not just last one
-walkPaths :: Annotate -> Expr -> ControlPath -> Z3 [Stmt]
-walkPaths _        _      Leaf                  = pure []
-walkPaths annotate curWlp (Uni stmt next)       = prependStmt' stmt $ walkPaths annotate (feasibleWlp stmt curWlp) next
-walkPaths annotate curWlp (Bin cond true false) = do
-  let wlp = flip feasibleWlp curWlp
-  let trueStmt = Assume cond
-  let falseStmt = Assume (OpNeg cond)
-  let trueWlp  = wlp trueStmt
-  let falseWlp = wlp falseStmt
-  trueFeasible <- isFeasible annotate trueWlp
-  if trueFeasible
-  -- otherwise walk both branches (TODO: sometimes also check feasibility of false branch?)
-  then do
-    let truePaths = prependStmt' trueStmt $ walkPaths annotate trueWlp true
-    let falsePaths = prependStmt' falseStmt $ walkPaths annotate falseWlp false
-    combine (++) truePaths falsePaths
-  -- if true branch is infeasible, we know that false branch must be feasible
-  -- we also prune true branch in this case
-  else prependStmt' falseStmt $ walkPaths annotate falseWlp false
+walk :: Annotate -> (Stats -> Stats) -> [Stmt] -> Step -> ControlPath -> Z3 ([Path], Stats)
+walk annotate updateStats prefix step next = do
+  (paths, stats) <- walkPaths annotate (getStmt step : prefix) next
+  return (prependStmt step paths, updateStats stats)
 
-prependStmt' :: Stmt -> Z3 [Stmt] -> Z3 [Stmt]
-prependStmt' stmt zStmts = do
-  prependStmt stmt <$> zStmts
+walkPaths :: Annotate -> [Stmt] -> ControlPath -> Z3 ([Path], Stats)
+walkPaths _ _ (Leaf Unfin) = pure ([], unfin emptyStats)
+walkPaths _ _ (Leaf term) = pure ([([], term)], emptyStats)
 
-isFeasible :: Annotate -> Expr -> Z3 Bool
-isFeasible annotate wlp = do
+walkPaths annotate prefix (Uni stmt next) = walk annotate node prefix (Left stmt) next
+-- prune infeasible branches
+walkPaths annotate prefix (Bin cond true false) =
+  feasible trueWlp (\_ -> feasible falseWlp walkBoth walkTrue) walkFalse
+  -- if true is... ^feasible -> check if false is feasible     ^infeasible -> we know false must be feasible
+  where feasible    = isFeasible annotate
+        trueStep    = branch cond True
+        falseStep   = branch cond False
+        trueWlp     = getFeasibleWlp trueStep  prefix
+        falseWlp    = getFeasibleWlp falseStep prefix
+        walkFalse _ = walk annotate (node . infeasible) prefix falseStep false
+        walkTrue _  = walk annotate (node . infeasible) prefix trueStep true
+        walkBoth _  = liftA2 mergePaths (walk annotate id prefix trueStep true) (walk annotate id prefix falseStep false)
+        mergePaths (paths1, stats1) (paths2, stats2) = (paths1 ++ paths2, node stats1 +++ stats2)
+
+isFeasible :: Annotate -> Expr -> (() -> Z3 ([Path], Stats)) -> (() -> Z3 ([Path], Stats)) -> Z3 ([Path], Stats)
+isFeasible _        (LitB True)  true _     = true ()
+isFeasible _        (LitB False) _ false    = false ()
+isFeasible annotate wlp          true false = do
   (result, _, _, _) <- assertPredicate (annotate wlp) [] [] []
-  return $ case result of
+  case result of
     Undef -> error "Undef"
-    Unsat -> False
-    Sat   -> True
+    Unsat -> false ()
+    Sat   -> true ()
 
-combine :: (Monad m) => (a -> a -> a) -> m a -> m a -> m a
-combine comb ma1 ma2 = do a1 <- ma1; comb a1 <$> ma2
-
-pickPaths :: Annotate -> ControlPath -> Z3 [Stmt]
-pickPaths annotate = walkPaths annotate (LitB True)
+pickPaths :: Annotate -> ControlPath -> Z3 ([Path], Stats)
+pickPaths annotate = walkPaths annotate []
