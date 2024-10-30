@@ -205,7 +205,7 @@ customEvalArray (Just model) name = do
   maybeLength <- evalInt model =<< mkIntVar =<< mkStringSymbol ("#" ++ name)
   let arrayLength = fromMaybe 0 maybeLength
   values <- evalArrayIndices model name [0..(arrayLength-1)]
-  return (Just (show values ++ " length: " ++ show arrayLength))
+  return (Just $ show $ catMaybes values)
 
 evalArrayIndices :: Model -> String -> [Integer] -> Z3 [Maybe Integer]
 evalArrayIndices _     _    [] = return []

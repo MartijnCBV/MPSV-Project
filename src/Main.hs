@@ -104,17 +104,20 @@ config = Config
          <> value 10
          <> metavar "INT" )
 
+printVals :: (a -> String) -> [(String, Maybe a)] -> IO ()
+printVals _     []                        = pure ()
+printVals toStr ((_, Nothing) : rest)     = printVals toStr rest
+printVals toStr ((name, Just val) : rest) = do putStrLn $ concat [name, " = ", toStr val]; printVals toStr rest
+
 printValues :: (Show a) => [(String, Maybe a)] -> IO ()
-printValues []                        = pure ()
-printValues ((_, Nothing) : rest)     = printValues rest
-printValues ((name, Just val) : rest) = do putStrLn $ concat [name, " = ", show val]; printValues rest
+printValues = printVals show
 
 printExample :: Example -> IO ()
 printExample (_, intValues, boolValues, arrayValues) = do
   putStrLn "Found counterexample for inputs:"
   printValues intValues
   printValues boolValues
-  printValues arrayValues
+  printVals id arrayValues
   return ()
 
 printOut :: Bool -> Double -> Stats -> IO ()
