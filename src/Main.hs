@@ -120,12 +120,12 @@ printExample (_, intValues, boolValues, arrayValues) = do
   return ()
 
 printOut :: Bool -> Double -> Stats -> IO ()
-printOut False time (Stats nodes paths unfins infeasibles size) = do
-  putStrLn $ concat ["Inspected ", show nodes, " nodes in ", show paths, " paths"]
+printOut False time (Stats nodes unfins infeasibles size) = do
+  putStrLn $ concat ["Inspected ", show nodes, " nodes"]
   putStrLn $ concat ["Pruned ", show unfins, " incomplete paths and ", show infeasibles, " infeasible paths"]
   putStrLn $ concat ["Verified formulas with total size of ", show size, "\nTook ", show time, " seconds"]
-printOut True time (Stats nodes paths unfins infeasibles size) =
-  putStrLn $ concat [show time, ",", show size, ",", show nodes, ",", show paths, ",", show unfins, ",", show infeasibles]
+printOut True time (Stats nodes unfins infeasibles size) =
+  putStrLn $ concat [show time, ",", show size, ",", show nodes, ",", show unfins, ",", show infeasibles]
 
 main :: IO ()
 main = do

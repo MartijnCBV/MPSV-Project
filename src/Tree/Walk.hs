@@ -43,18 +43,22 @@ walkPaths _ _ (Leaf term) = pure ([([], term)], emptyStats)
 walkPaths annotate prefix (Uni stmt next) = walk annotate node prefix stmt next
 -- prune infeasible branches
 walkPaths annotate prefix (Bin cond true false) =
-  feasible (getFeasibleWlp $ trueStmt : prefix) (\_ -> feasible (getFeasibleWlp $ falseStmt : prefix) branchTT branchTF) branchFT
-  where feasible = isFeasible annotate
-        trueStmt = Assume cond
-        falseStmt = Assume (OpNeg $ Parens cond)
-        branchFT _ = walk annotate (node . path . infeasible) prefix falseStmt false
-        branchTF _ = walk annotate (node . path . infeasible) prefix trueStmt true
-        branchTT _ = liftA2 mergePaths (walk annotate id prefix trueStmt true) (walk annotate id prefix falseStmt false)
-        mergePaths (paths1, stats1) (paths2, stats2) = (paths1 ++ paths2, (node . path) stats1 +++ stats2)
+  feasible trueWlp (\_ -> feasible falseWlp walkBoth walkTrue) walkFalse
+  -- if true is... ^feasible -> check if false is feasible     ^infeasible -> we know false must be feasible
+  where feasible    = isFeasible annotate
+        trueStmt    = Assume cond
+        falseStmt   = Assume (OpNeg $ Parens cond)
+        trueWlp     = getFeasibleWlp $ trueStmt : prefix
+        falseWlp    = getFeasibleWlp $ falseStmt : prefix
+        walkFalse _ = walk annotate (node . infeasible) prefix falseStmt false
+        walkTrue _  = walk annotate (node . infeasible) prefix trueStmt true
+        walkBoth _  = liftA2 mergePaths (walk annotate id prefix trueStmt true) (walk annotate id prefix falseStmt false)
+        mergePaths (paths1, stats1) (paths2, stats2) = (paths1 ++ paths2, node stats1 +++ stats2)
 
 isFeasible :: Annotate -> Expr -> (() -> Z3 ([Path], Stats)) -> (() -> Z3 ([Path], Stats)) -> Z3 ([Path], Stats)
-isFeasible _        (LitB True) true _     = true ()
-isFeasible annotate wlp         true false = do
+isFeasible _        (LitB True)  true _     = true ()
+isFeasible _        (LitB False) _ false    = false ()
+isFeasible annotate wlp          true false = do
   (result, _, _, _) <- assertPredicate (annotate wlp) [] [] []
   case result of
     Undef -> error "Undef"
