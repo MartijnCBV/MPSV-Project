@@ -3,7 +3,7 @@ module Predicate.Solver where
 import Type
 import Data.Maybe
 import Data.List
-import GCLParser.GCLDatatype (Type(PType, AType), PrimitiveType(PTInt, PTBool))
+import GCLParser.GCLDatatype (Type(PType, AType), PrimitiveType(PTInt, PTBool), Stmt(Skip))
 
 import Z3.Monad
 
@@ -123,16 +123,34 @@ mkWithASTPair mkOperation e1 e2 = do
 -- | Evaluate if expression is satisfiable and with which values
 assertPredicate :: TypedExpr -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
 assertPredicate expr intNames boolNames arrayNames = do
+  -- Set Z3 to parallel
+  -- params <- mkParams
+  -- parallelSymbol <- mkStringSymbol "threads"
+  -- paramsSetUInt  params parallelSymbol 8
+  -- solverSetParams params
+
+  -- Solve predicate
   assert =<< toPredicate expr
   (sat, m) <- solverCheckAndGetModel
   evaluateResult sat m intNames boolNames arrayNames
 
+assertPredicates :: [TypedExpr] -> [Stmt] -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String], Stmt)
+assertPredicates []          _            _        _         _          = return (Unsat, [], [], [], Skip)
+assertPredicates (expr:exprs) (stmt:stmts) intNames boolNames arrayNames = do
+  assert =<< local (toPredicate expr)
+  (sat, m) <- solverCheckAndGetModel
+  if isNothing m
+    then do
+      solverReset
+      assertPredicates exprs stmts intNames boolNames arrayNames
+    else do
+      (result, intValues, boolValues, arrayValues) <- evaluateResult sat m intNames boolNames arrayNames
+      return (result, intValues, boolValues, arrayValues, stmt)
+
 evaluateResult :: Result -> Maybe Model -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
 evaluateResult result Nothing _        _         _          = do 
-  solverReset
   return (result, [], [], [])
 evaluateResult result _       []       []        []         = do 
-  solverReset
   return (result, [], [], [])
 evaluateResult _      m       intNames boolNames arrayNames = do
   -- If SAT, evaluate array length and add var for each index under #a
@@ -161,7 +179,6 @@ evaluateResult _      m       intNames boolNames arrayNames = do
     ys <- xs
     return (y:ys)) (return []) (map (customEvalArray m) arrayNames)
 
-  solverReset
   return (sat, intValues, boolValues, arrayValues)
 
 -- | Evaluate integer based on name
