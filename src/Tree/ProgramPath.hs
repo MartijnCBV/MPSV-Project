@@ -12,18 +12,7 @@ data UniBinTree l u b = Leaf l
 data Terminal = Except | End | Unfin
   deriving (Eq, Show)
 
-type ControlPath = UniBinTree Terminal (Stmt, Terminal) (Expr, Terminal, Terminal)
-
-term :: ControlPath -> Terminal
-term (Leaf trm)                = trm
-term (Uni (_, trm) _)          = trm
-term (Bin (_, trm1, trm2) _ _) = max trm1 trm2
-
-uniTerm :: Stmt -> ControlPath -> ControlPath
-uniTerm stmt next = Uni (stmt, term next) next
-
-binTerm :: Expr -> ControlPath -> ControlPath -> ControlPath
-binTerm cond true false = Bin (cond, term true, term false) true false
+type ControlPath = UniBinTree Terminal Stmt Expr
 
 instance Ord Terminal where
   (<=) :: Terminal -> Terminal -> Bool
@@ -84,16 +73,16 @@ catchException :: (Integral n) => n -> Maybe Expr -> ControlPath -> [Stmt] -> Co
 -- if there's no error condition, just continue
 catchException _ Nothing continue _ = continue
 -- when we're not in a try-catch context, throwing an exception immediately ends program execution
-catchException _ (Just cond) continue [] = Bin (cond, Except, term continue) (Leaf Except) continue
+catchException _ (Just cond) continue [] = Bin cond (Leaf Except) continue
 -- otherwise jump to the topmost handler
-catchException n (Just cond) continue (catch : handles) = binTerm cond handle continue
+catchException n (Just cond) continue (catch : handles) = Bin cond handle continue
   where handle = extractPaths' (n - 1) (handles $+> catch)
 
 extractPaths' :: (Integral n) => n -> (Stmt, [Stmt]) -> ControlPath
 extractPaths' 0 _                       = Leaf Unfin
-extractPaths' _ (stmt@Skip, _)          = Uni (stmt, End) (Leaf End)
-extractPaths' _ (stmt@(Assert {}), _)   = Uni (stmt, End) (Leaf End)
-extractPaths' _ (stmt@(Assume {}), _)   = Uni (stmt, End) (Leaf End)
+extractPaths' _ (stmt@Skip, _)          = Uni stmt (Leaf End)
+extractPaths' _ (stmt@(Assert {}), _)   = Uni stmt (Leaf End)
+extractPaths' _ (stmt@(Assume {}), _)   = Uni stmt (Leaf End)
 extractPaths' n (Block _ stmt, handles) = extractPaths' n (handles $+> stmt)
 
 extractPaths' n (Assign _ expr, handles) = catchException n (errorsOn expr) (Leaf End) handles
@@ -104,13 +93,13 @@ extractPaths' n (AAssign array index expr, handles) =
   where errorCond = Just $ disjunct $ indexOOB (Var array) index : toList (errorsOn expr)
 
 extractPaths' n (IfThenElse cond thenStmt elseStmt, handles) =
-  catchException n (errorsOn cond) (Bin (cond, term thenPaths, term elsePaths) thenPaths elsePaths) handles
+  catchException n (errorsOn cond) (Bin cond thenPaths elsePaths) handles
   where thenPaths = extractPaths' (n - 1) (handles $+> thenStmt)
         elsePaths = extractPaths' (n - 1) (handles $+> elseStmt)
 
 extractPaths' n (while@(While cond body), handles) =
   catchException n (errorsOn cond) whileBranch handles
-  where whileBranch = Bin (cond, term bodyBranch, End) bodyBranch (Leaf End)
+  where whileBranch = Bin cond bodyBranch (Leaf End)
         bodyBranch  = extractPaths' (n - 1) (handles $+> body +: while)
 
 extractPaths' n (TryCatch _ try catch, handles) = extractPaths' n ((catch : handles) $+> try)
@@ -119,12 +108,12 @@ extractPaths' n (Seq (Block _ stmt1) stmt2, handles) = extractPaths' n (handles 
 
 -- append statements following an if-then-else to both branches
 extractPaths' n (Seq (IfThenElse cond thenStmt elseStmt) stmt, handles) =
-  catchException n (errorsOn cond) (binTerm cond thenPaths elsePaths) handles
+  catchException n (errorsOn cond) (Bin cond thenPaths elsePaths) handles
   where thenPaths = extractPaths' (n - 1) (handles $+> thenStmt +: stmt)
         elsePaths = extractPaths' (n - 1) (handles $+> elseStmt +: stmt)
 
 extractPaths' n (while@(Seq (While cond body) stmt), handles) =
-  catchException n (errorsOn cond) (binTerm cond whilePaths exitPaths) handles
+  catchException n (errorsOn cond) (Bin cond whilePaths exitPaths) handles
   where whilePaths = extractPaths' (n - 1) (handles $+> body +: while)
         exitPaths  = extractPaths' (n - 1) (handles $+> stmt)
 
@@ -133,15 +122,15 @@ extractPaths' n (Seq (TryCatch _ try catch) stmt, handles) =
 
 extractPaths' n (Seq ass@(Assign _ expr) stmt, handles) =
   catchException n (errorsOn expr) continue handles
-  where continue = uniTerm ass $ extractPaths' (n - 1) (handles $+> stmt)
+  where continue = Uni ass $ extractPaths' (n - 1) (handles $+> stmt)
 
 extractPaths' n (Seq ass@(AAssign array index expr) stmt, handles) =
   catchException n errorCond continue handles
   -- index out of bounds exception when assigning to index out of bounds
   where errorCond = Just $ disjunct $ indexOOB (Var array) index : toList (errorsOn expr)
-        continue  = uniTerm ass $ extractPaths' (n - 1) (handles $+> stmt)
+        continue  = Uni ass $ extractPaths' (n - 1) (handles $+> stmt)
 
-extractPaths' n (Seq stmt1 stmt2, handles) = uniTerm stmt1 (extractPaths' (n - 1) (handles $+> stmt2))
+extractPaths' n (Seq stmt1 stmt2, handles) = Uni stmt1 (extractPaths' (n - 1) (handles $+> stmt2))
 
 extractPaths' _ _ = error "not yet implemented"
 

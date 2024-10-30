@@ -11,38 +11,31 @@ replace name value = transformExpr fillVar
   where fillVar (Var n) | n == name = Just value
         fillVar _                   = Nothing
 
-repBy :: (String -> Expr) -> String -> Expr -> Expr -> Expr
-repBy f s = RepBy (f s)
-
 opBinParens :: Expr -> (Expr -> Expr -> Expr) -> Expr -> Expr
 opBinParens e1 f e2 = Parens e1 `f` Parens e2
 
-wlpBase :: (Stmt -> Expr -> Expr) -> Stmt -> Expr -> Expr
-wlpBase _ Skip                       expr = expr
-wlpBase recFunc assert@(Assert _)    expr = recFunc assert expr
-wlpBase recFunc assume@(Assume _)    expr = recFunc assume expr
-wlpBase _ (Assign s e)               expr = replace s e expr
-wlpBase recFunc (AAssign s e1 e2)    expr = flip (wlpBase recFunc) expr $ Assign s $ repBy Var s e1 e2
-wlpBase recFunc (Seq s1 s2)          expr = wlpBase recFunc s1 $ wlpBase recFunc s2 expr
-wlpBase _ _ _ = undefined
-
-normalWlp :: Stmt -> Expr -> Expr
-normalWlp = wlpBase wlpRec
-  where wlpRec (Assert e) expr = opBinParens e opAnd expr
-        wlpRec (Assume e) expr = opBinParens e opImplication expr
-        wlpRec _ _ = error "unsupported"
+validWlp :: [Stmt] -> Expr
+validWlp (Skip : rest)              = validWlp rest
+validWlp ((Assert e) : rest)        = opBinParens e opAnd (validWlp rest)
+validWlp ((Assume e) : rest)        = opBinParens e opImplication (validWlp rest)
+validWlp ((Assign s e) : rest)      = replace s e (validWlp rest)
+validWlp ((AAssign s e1 e2) : rest) = validWlp $ Assign s (RepBy (Var s) e1 e2) : rest
+validWlp [] = LitB True
+validWlp _ = undefined
 
 feasibleWlp :: [Stmt] -> Expr
 feasibleWlp (Skip : rest)              = feasibleWlp rest
 feasibleWlp ((Assert _) : rest)        = feasibleWlp rest
 feasibleWlp ((Assume e) : rest)        = opBinParens e opAnd (feasibleWlp rest)
 feasibleWlp ((Assign s e) : rest)      = replace s e (feasibleWlp rest)
-feasibleWlp ((AAssign s e1 e2) : rest) = feasibleWlp $ Assign s (repBy Var s e1 e2) : rest
+feasibleWlp ((AAssign s e1 e2) : rest) = feasibleWlp $ Assign s (RepBy (Var s) e1 e2) : rest
 feasibleWlp [] = LitB True
 feasibleWlp _ = undefined
 
-getWlp :: Stmt -> Expr
-getWlp = flip normalWlp (LitB True)
+-- validity wlp arrives in forward (front-to-back) order
+getWlp :: [Stmt] -> Expr
+getWlp = validWlp
 
+-- feasibility wlp arrives in reverse (back-to-front) order, so reverse it
 getFeasibleWlp :: [Stmt] -> Expr
 getFeasibleWlp = feasibleWlp . reverse

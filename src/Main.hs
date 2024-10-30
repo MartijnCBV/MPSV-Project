@@ -4,7 +4,7 @@ module Main where
 import GCLParser.Parser ( parseGCLfile )
 import Type (annotateForProgram, TypedExpr)
 import Tree.ProgramPath (extractPaths)
-import Tree.Walk (pickPaths)
+import Tree.Walk (pickPaths, Path)
 import GCLParser.GCLDatatype
 import Z3.Monad
 import Predicate.Solver (assertPredicate)
@@ -14,7 +14,6 @@ import Traverse (traverseExpr)
 import System.TimeIt
 import Options.Applicative
 
-type Path = Stmt
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
 newtype SemigroupInt = SemigroupInt Int
@@ -33,14 +32,14 @@ sizeOf = toInt . traverseExpr (SemigroupInt . isLeaf)
                isLeaf (LitI _) = 1
                isLeaf _        = 0
 
-checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Stmt -> Z3 ((Result, [Maybe Integer], [Maybe Bool], [Maybe String]), Int)
-checkPath annotate (intNames, boolNames, arrayNames) stmt = do
+checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Path -> Z3 ((Result, [Maybe Integer], [Maybe Bool], [Maybe String]), Int)
+checkPath annotate (intNames, boolNames, arrayNames) (pth, _) = do
   -- negate precondition, so that a result of "Unsat" indicates
   -- that the formula is always true -> valid
-  let precond = OpNeg (getWlp stmt)
+  let precond = OpNeg (getWlp pth)
   (, sizeOf precond) <$> assertPredicate (annotate precond) intNames boolNames arrayNames
 
-checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> Z3 (Either Example (), Int)
+checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Path] -> Z3 (Either Example (), Int)
 checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
   ((result, intValues, boolValues, arrayValues), size) <- checkPath annotate names stmt
   case result of
@@ -74,8 +73,8 @@ checkTree depth prgm = do
   (res, totalSize) <- checkPaths annotate inputs paths
   return (res, stats { totalSize = totalSize })
 
-checkProgram :: Config -> IO (Either Example (), Stats)
-checkProgram (Config filePath _ depth) = do
+checkProgram :: Int -> String -> IO (Either Example (), Stats)
+checkProgram depth filePath = do
   gcl <- parseGCLfile filePath
   prgm <- case gcl of
     Left err -> error err
@@ -130,11 +129,10 @@ printOut True time (Stats nodes paths unfins infeasibles size) =
 
 main :: IO ()
 main = do
-  cfg <- execParser opts
-  (time, (result, stats)) <- timeItT $ checkProgram cfg
-  let printCsv = csv cfg
-  printOut printCsv time stats
-  case (printCsv, result) of
+  (Config filePath csv depth) <- execParser opts
+  (time, (result, stats)) <- timeItT $ checkProgram depth filePath
+  printOut csv time stats
+  case (csv, result) of
     (True, _) -> pure ()
     (_, Left err) -> printExample err
     (_, Right ()) -> putStrLn "Program is valid"
