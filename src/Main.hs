@@ -4,7 +4,7 @@ module Main where
 import GCLParser.Parser ( parseGCLfile )
 import Type (annotateForProgram, TypedExpr)
 import Tree.ProgramPath (extractPaths)
-import Tree.Walk (pickPaths, Path)
+import Tree.Walk (pickPaths)
 import GCLParser.GCLDatatype
 import Z3.Monad
 import Predicate.Solver (assertPredicate)
@@ -13,6 +13,8 @@ import Stats
 import Traverse (traverseExpr)
 import System.TimeIt
 import Options.Applicative
+import Tree.Data (Path, Step, Branch, BranchType (BExcept), Terminal (Except))
+import Control.Monad (when)
 
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
@@ -84,6 +86,7 @@ checkProgram depth filePath = do
 data Config = Config {
   file :: String,
   csv :: Bool,
+  showPath :: Bool,
   depth :: Int
 }
 
@@ -95,6 +98,10 @@ config = Config
       <*> switch
           ( long "csv"
          <> help "Print in CSV format")
+      <*> switch
+          ( long "path"
+         <> short 'p'
+         <> help "Show counterexample's path")
       <*> option auto
           ( long "depth"
          <> short 'd'
@@ -111,13 +118,30 @@ printVals toStr ((name, Just val) : rest) = do putStrLn $ concat [name, " = ", t
 printValues :: (Show a) => [(String, Maybe a)] -> IO ()
 printValues = printVals show
 
-printExample :: Example -> IO ()
-printExample (_, intValues, boolValues, arrayValues) = do
+printBranch :: Branch -> IO ()
+printBranch (_, BExcept stmt, True)  = putStrLn $ "Exception in: " ++ stmt
+printBranch (_, BExcept stmt, False) = putStrLn $ "No exception in: " ++ stmt
+printBranch (cond, btype, dir) = putStrLn $ concat ["Branch ", show dir, " in ", show btype, " ", show cond]
+
+printPath :: [Step] -> IO ()
+printPath []                    = pure ()
+printPath (Left stmt : rest)    = do print stmt; printPath rest
+printPath (Right branch : rest) = do printBranch branch; printPath rest
+
+printExample :: Bool -> Example -> IO ()
+printExample showPath ((path, term), intValues, boolValues, arrayValues) = do
   putStrLn "Found counterexample for inputs:"
   printValues intValues
   printValues boolValues
   printVals id arrayValues
-  return ()
+  when showPath doShowPath
+  where doShowPath = do 
+                    putStrLn "Path:"
+                    printPath path
+                    case term of
+                      Except -> putStrLn "Terminating exceptionally"
+                      _      -> putStrLn "Terminating normally"
+                    return ()
 
 printOut :: Bool -> Double -> Stats -> IO ()
 printOut False time (Stats nodes unfins infeasibles size) = do
@@ -129,12 +153,12 @@ printOut True time (Stats nodes unfins infeasibles size) =
 
 main :: IO ()
 main = do
-  (Config filePath csv depth) <- execParser opts
+  (Config filePath csv showPath depth) <- execParser opts
   (time, (result, stats)) <- timeItT $ checkProgram depth filePath
   printOut csv time stats
   case (csv, result) of
     (True, _) -> pure ()
-    (_, Left err) -> printExample err
+    (_, Left err) -> printExample showPath err
     (_, Right ()) -> putStrLn "Program is valid"
   return ()
   where

@@ -32,6 +32,7 @@ executable verify
                      , GCLLexer.Token
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
+                     , Tree.Data
                      , Tree.ProgramPath
                      , Tree.Wlp
                      , Tree.Walk

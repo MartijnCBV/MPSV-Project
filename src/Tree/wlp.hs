@@ -1,7 +1,8 @@
-module Tree.Wlp (getWlp, feasibleWlp, getFeasibleWlp) where
+module Tree.Wlp (getWlp, getFeasibleWlp) where
 
 import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
 import Traverse (transformExpr)
+import Tree.Data
 
 type Name = String
 type Value = Expr
@@ -14,12 +15,13 @@ replace name value = transformExpr fillVar
 opBinParens :: Expr -> (Expr -> Expr -> Expr) -> Expr -> Expr
 opBinParens e1 f e2 = Parens e1 `f` Parens e2
 
-validWlp :: [Stmt] -> Expr
-validWlp (Skip : rest)              = validWlp rest
-validWlp ((Assert e) : rest)        = opBinParens e opAnd (validWlp rest)
-validWlp ((Assume e) : rest)        = opBinParens e opImplication (validWlp rest)
-validWlp ((Assign s e) : rest)      = replace s e (validWlp rest)
-validWlp ((AAssign s e1 e2) : rest) = validWlp $ Assign s (RepBy (Var s) e1 e2) : rest
+validWlp :: [Step] -> Expr
+validWlp (Left Skip : rest)                = validWlp rest
+validWlp (Left ((Assert e)) : rest)        = opBinParens e opAnd (validWlp rest)
+validWlp (Left ((Assume e)) : rest)        = opBinParens e opImplication (validWlp rest)
+validWlp (Left ((Assign s e)) : rest)      = replace s e (validWlp rest)
+validWlp (Left ((AAssign s e1 e2)) : rest) = validWlp $ Left (Assign s (RepBy (Var s) e1 e2)) : rest
+validWlp (branching@(Right _) : rest)      = validWlp $ Left (getStmt branching) : rest
 validWlp [] = LitB True
 validWlp _ = undefined
 
@@ -33,9 +35,9 @@ feasibleWlp [] = LitB True
 feasibleWlp _ = undefined
 
 -- validity wlp arrives in forward (front-to-back) order
-getWlp :: [Stmt] -> Expr
+getWlp :: [Step] -> Expr
 getWlp = validWlp
 
 -- feasibility wlp arrives in reverse (back-to-front) order, so reverse it
-getFeasibleWlp :: [Stmt] -> Expr
-getFeasibleWlp = feasibleWlp . reverse
+getFeasibleWlp :: Step -> [Stmt] -> Expr
+getFeasibleWlp step prefix = (feasibleWlp . reverse) (getStmt step : prefix)
