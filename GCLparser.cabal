@@ -44,7 +44,7 @@ library gclparser-lib
   hs-source-dirs:      src
   build-tools:         happy, alex
   default-language:    Haskell2010
-  GHC-Options:         -threaded -rtsopts -Wall
+  GHC-Options:         -threaded -Wall
   default-extensions:  TupleSections
                      , NamedFieldPuns
 

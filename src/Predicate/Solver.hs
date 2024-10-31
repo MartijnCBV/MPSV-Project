@@ -4,8 +4,11 @@ import Type
 import Data.Maybe
 import Data.List
 import GCLParser.GCLDatatype (Type(PType, AType), PrimitiveType(PTInt, PTBool), Stmt(Skip))
+import Control.Monad
 
 import Z3.Monad
+
+type Evaluation = (Result, [Maybe Integer], [Maybe Bool], [Maybe String], Stmt)
 
 -- | Convert an TypedExpr to a Z3 predicate which can be evaluated
 toPredicate :: TypedExpr -> Z3 AST
@@ -120,24 +123,10 @@ mkWithASTPair mkOperation e1 e2 = do
   b <- e2
   mkOperation a b
 
--- | Evaluate if expression is satisfiable and with which values
-assertPredicate :: TypedExpr -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-assertPredicate expr intNames boolNames arrayNames = do
-  -- Set Z3 to parallel
-  -- params <- mkParams
-  -- parallelSymbol <- mkStringSymbol "threads"
-  -- paramsSetUInt  params parallelSymbol 8
-  -- solverSetParams params
-
-  -- Solve predicate
+assertPredicates :: [(TypedExpr, Stmt)] -> [String] -> [String] -> [String] -> Z3 Evaluation
+assertPredicates []                   _        _         _          = return (Unsat, [], [], [], Skip)
+assertPredicates ((expr, stmt):exprs) intNames boolNames arrayNames = do
   assert =<< toPredicate expr
-  (sat, m) <- solverCheckAndGetModel
-  evaluateResult sat m intNames boolNames arrayNames
-
-assertPredicates :: [TypedExpr] -> [Stmt] -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String], Stmt)
-assertPredicates []          _            _        _         _          = return (Unsat, [], [], [], Skip)
-assertPredicates (expr:exprs) (stmt:stmts) intNames boolNames arrayNames = do
-  assert =<< local (toPredicate expr)
   (sat, m) <- solverCheckAndGetModel
   if isNothing m
     then do

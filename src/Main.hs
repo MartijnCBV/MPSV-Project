@@ -17,7 +17,7 @@ type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(Strin
 threaded :: Bool
 threaded = False
 numOfThreads :: Int
-numOfThreads = 1
+numOfThreads = 8
 wlpInBulk :: Bool
 wlpInBulk = True
 
@@ -32,13 +32,13 @@ checkPaths False = checkPathsPerOne
 
 checkPathsInBulk :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> IO (Either Example ())
 checkPathsInBulk annotate names@(intNames, boolNames, arrayNames) stmts = do  
-  (result, intValues, boolValues, arrayValues, stmt) <- evalZ3 (assertPredicates negatedWlps stmts intNames boolNames arrayNames)
+  (result, intValues, boolValues, arrayValues, stmt) <- evalZ3 (assertPredicates negatedWlps intNames boolNames arrayNames)
   case result of
     Sat   -> return $ Left (stmt, zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues)
     Unsat -> return $ Right ()
     Undef -> error "Undef"
   where
-    negatedWlps = (map (negateWlp annotate) stmts)
+    negatedWlps = zip (map (negateWlp annotate) stmts) stmts
 
 checkPathsPerOne :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Stmt] -> IO (Either Example ())
 checkPathsPerOne _        _                                       []           = return $ Right ()  
@@ -98,52 +98,11 @@ threadCheckPaths outVar annotate params paths = do
   putMVar outVar result
 
 
-main :: IO ()
-main = do  
+testThreads :: IO ()
+testThreads = do  
   maxThreads <- getNumCapabilities
-  putStrLn $ "Threads: " ++ (show numOfThreads) ++ "/" ++ (show maxThreads)
+  putStrLn $ "Threaded: " ++ (show threaded) ++ " Threads: " ++ (show numOfThreads) ++ "/" ++ (show maxThreads) ++ " wlpInBulk: " ++ (show wlpInBulk)
   putStrLn . show =<< getCurrentTime
   result <- checkProgram 30 "./examples/benchmark/memberOf.gcl"
   putStrLn $ show result
   putStrLn . show =<< getCurrentTime
-  
-  -- putStrLn "Threads: 2"
-  -- begin <- getCurrentTime
-  -- result <- checkProgram 37 2 "./examples/benchmark/invalidMemberOf.gcl"
-  -- end <- getCurrentTime
-  -- putStrLn (show (begin))
-  -- putStrLn (show (end))
-  -- putStrLn $ show result
-  
-  -- putStrLn "Threads: 4"
-  -- begin <- getCurrentTime
-  -- result <- checkProgram 37 4 "./examples/benchmark/invalidMemberOf.gcl"
-  -- end <- getCurrentTime
-  -- putStrLn (show (begin))
-  -- putStrLn (show (end))
-  -- putStrLn $ show result
-  
-  -- putStrLn "Threads: 8"
-  -- begin <- getCurrentTime
-  -- result <- checkProgram 37 8 "./examples/benchmark/invalidMemberOf.gcl"
-  -- end <- getCurrentTime
-  -- putStrLn (show (begin))
-  -- putStrLn (show (end))
-  -- putStrLn $ show result
-  
-  -- putStrLn "Threads: 16"
-  -- begin <- getCurrentTime
-  -- result <- checkProgram 37 16 "./examples/benchmark/invalidMemberOf.gcl"
-  -- end <- getCurrentTime
-  -- putStrLn (show (begin))
-  -- putStrLn (show (end))
-  -- putStrLn $ show result
-  
-  -- putStrLn "Threads: 32"
-  -- begin <- getCurrentTime
-  -- result <- checkProgram 37 32 "./examples/benchmark/invalidMemberOf.gcl"
-  -- end <- getCurrentTime
-  -- putStrLn (show (begin))
-  -- putStrLn (show (end))
-  -- putStrLn $ show result
-  
