@@ -4,7 +4,7 @@ module Main where
 import GCLParser.Parser ( parseGCLfile )
 import Type (annotateForProgram, TypedExpr)
 import Tree.ProgramPath (extractPaths)
-import Tree.Walk (pickPaths)
+import Tree.Walk
 import GCLParser.GCLDatatype
 import Z3.Monad
 import Predicate.Solver (assertPredicate)
@@ -71,7 +71,7 @@ checkTree depth prgm = do
   let inputs = inputsOf prgm
   let annotate = annotateForProgram prgm
   let tree = extractPaths depth $ stmt prgm
-  (paths, stats) <- pickPaths annotate tree
+  (paths, stats) <- pickPaths annotate (UntilDepth 20 (CheckAll AssumeIfFalse) (Exponential 1.1 Branches AssumeIfFalse)) tree
   (res, totalSize) <- checkPaths annotate inputs paths
   return (res, stats { totalSize = totalSize })
 
