@@ -1,4 +1,5 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE LambdaCase #-}
 module Main where
 
 import GCLParser.Parser ( parseGCLfile )
@@ -16,6 +17,13 @@ import Options.Applicative
 import Tree.Data (Path, Step, Branch, BranchType (BExcept), Terminal (Except))
 import Control.Monad (when)
 import Tree.Heuristic
+    ( HeuristicMeasure(Depth),
+      Heuristic,
+      never,
+      checkAll,
+      linear,
+      exponential,
+      untilDepth )
 
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
@@ -67,42 +75,49 @@ inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool i
           _ -> False
         getName (VarDeclaration name _) = name
 
-checkTree :: (Integral n) => n -> Program -> Z3 (Maybe Example, Stats)
-checkTree depth prgm = do
+checkTree :: Config -> Program -> Z3 (Maybe Example, Stats)
+checkTree Config {depth=depth, heuristic=heuristic, optPruning=optPruning} prgm = do
   let inputs = inputsOf prgm
   let annotate = annotateForProgram prgm
   let tree = extractPaths depth $ stmt prgm
-  (paths, stats) <- listPaths True checkAll annotate tree
+  (paths, stats) <- listPaths optPruning heuristic annotate tree
   (res, totalSize) <- checkPaths annotate inputs paths
   return (res, stats { totalSize = totalSize })
 
-checkProgram :: Int -> String -> IO (Maybe Example, Stats)
-checkProgram depth filePath = do
+checkProgram :: Config -> IO (Maybe Example, Stats)
+checkProgram cfg@Config {file=filePath} = do
   gcl <- parseGCLfile filePath
   prgm <- case gcl of
     Left err -> error err
     Right prgm -> pure prgm
-  evalZ3 $ checkTree depth prgm
+  evalZ3 $ checkTree cfg prgm
 
 data Config = Config {
   file :: String,
+  depth :: Int,
+  heuristic :: Heuristic,
+  optPruning :: Bool,
   csv :: Bool,
-  showPath :: Bool,
-  depth :: Int
+  showPath :: Bool
 }
 
+parseHeuristic :: ReadM (Int -> Heuristic)
+parseHeuristic = eitherReader $ \case
+  "never"     -> Right $ const never
+  "always"    -> Right $ const checkAll
+  "second"    -> Right $ \_ -> linear 2 Depth
+  "expSecond" -> Right $ \_ -> exponential 2 Depth
+  "half"      -> Right $ \d -> untilDepth (d `div` 2) Depth checkAll
+  s           -> Left $ "Unsupported heuristic: " ++ s
+
+mkConfig :: String -> Int -> (Int -> Heuristic) -> Bool -> Bool -> Bool -> Config
+mkConfig f d mkH = Config f d (mkH d)
+
 config :: Parser Config
-config = Config
+config = mkConfig
       <$> argument str
           ( metavar "FILE"
          <> help "File to verify" )
-      <*> switch
-          ( long "csv"
-         <> help "Print in CSV format")
-      <*> switch
-          ( long "path"
-         <> short 'p'
-         <> help "Show counterexample's path")
       <*> option auto
           ( long "depth"
          <> short 'd'
@@ -110,6 +125,23 @@ config = Config
          <> showDefault
          <> value 10
          <> metavar "INT" )
+      <*> option parseHeuristic
+          ( long "heur"
+         <> short 'h'
+         <> help "Branch pruning heuristic to use"
+         <> value (const checkAll)
+         <> metavar "NAME")
+      <*> switch
+          ( long "opt"
+         <> short 'o'
+         <> help "Optimize branch pruning")
+      <*> switch
+          ( long "csv"
+         <> help "Print in CSV format")
+      <*> switch
+          ( long "path"
+         <> short 'p'
+         <> help "Show counterexample's path")
 
 printVals :: (a -> String) -> [(String, Maybe a)] -> IO ()
 printVals _     []                        = pure ()
@@ -136,7 +168,7 @@ printExample showPath ((path, term), intValues, boolValues, arrayValues) = do
   printValues boolValues
   printVals id arrayValues
   when showPath doShowPath
-  where doShowPath = do 
+  where doShowPath = do
                     putStrLn "Path:"
                     printPath path
                     case term of
@@ -154,8 +186,8 @@ printOut True time (Stats nodes unfins infeasibles size) =
 
 main :: IO ()
 main = do
-  (Config filePath csv showPath depth) <- execParser opts
-  (time, (result, stats)) <- timeItT $ checkProgram depth filePath
+  cfg@Config {csv=csv, showPath=showPath} <- execParser opts
+  (time, (result, stats)) <- timeItT $ checkProgram cfg
   printOut csv time stats
   case (csv, result) of
     (True, _) -> pure ()
