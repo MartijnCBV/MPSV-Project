@@ -96,6 +96,3 @@ toMap = foldr addToMap empty
 
 programVars :: Program -> Map String GDT.Type
 programVars prgm = toMap (input prgm ++ output prgm ++ collectVarDecls (stmt prgm))
-
-annotateForProgram :: Program -> Annotate
-annotateForProgram prgm = annotateWithTypes $ programVars prgm
