@@ -7,6 +7,7 @@ import Type (Annotate)
 import Z3.Monad (Z3, Result (Sat, Unsat, Undef))
 import Stats
 import Control.Applicative
+import Z3.Base (Tactic)
 
 type Path = ([Stmt], Terminal)
 
@@ -31,35 +32,35 @@ when encountering branch
   add branch condition (or negation thereof) to conjunctive wlp
   branch is feasible iff this new conjunctive wlp is sat
 -}
-walk :: Annotate -> (Stats -> Stats) -> [Stmt] -> Stmt -> ControlPath -> Z3 ([Path], Stats)
-walk annotate updateStats prefix stmt next = do
-  (paths, stats) <- walkPaths annotate (stmt : prefix) next
+walk :: Annotate -> (Stats -> Stats) -> [Stmt] -> Stmt -> ControlPath -> Maybe (Z3 Tactic) -> Z3 ([Path], Stats)
+walk annotate updateStats prefix stmt next t = do
+  (paths, stats) <- walkPaths annotate (stmt : prefix) next t
   return (prependStmt stmt paths, updateStats stats)
 
-walkPaths :: Annotate -> [Stmt] -> ControlPath -> Z3 ([Path], Stats)
-walkPaths _ _ (Leaf Unfin) = pure ([], unfin emptyStats)
-walkPaths _ _ (Leaf term) = pure ([([], term)], emptyStats)
+walkPaths :: Annotate -> [Stmt] -> ControlPath -> Maybe (Z3 Tactic) -> Z3 ([Path], Stats)
+walkPaths _ _ (Leaf Unfin) _ = pure ([], unfin emptyStats)
+walkPaths _ _ (Leaf term)  _ = pure ([([], term)], emptyStats)
 
-walkPaths annotate prefix (Uni stmt next) = walk annotate node prefix stmt next
+walkPaths annotate prefix (Uni stmt next) t = walk annotate node prefix stmt next t
 -- prune infeasible branches
-walkPaths annotate prefix (Bin cond true false) =
-  feasible (getFeasibleWlp $ trueStmt : prefix) (\_ -> feasible (getFeasibleWlp $ falseStmt : prefix) branchTT branchTF) branchFT
+walkPaths annotate prefix (Bin cond true false) t =
+  feasible (getFeasibleWlp $ trueStmt : prefix) (\_ -> feasible (getFeasibleWlp $ falseStmt : prefix) branchTT branchTF t) branchFT t
   where feasible = isFeasible annotate
         trueStmt = Assume cond
         falseStmt = Assume (OpNeg $ Parens cond)
-        branchFT _ = walk annotate (node . path . infeasible) prefix falseStmt false
-        branchTF _ = walk annotate (node . path . infeasible) prefix trueStmt true
-        branchTT _ = liftA2 mergePaths (walk annotate id prefix trueStmt true) (walk annotate id prefix falseStmt false)
+        branchFT _ = walk annotate (node . path . infeasible) prefix falseStmt false t
+        branchTF _ = walk annotate (node . path . infeasible) prefix trueStmt true t
+        branchTT _ = liftA2 mergePaths (walk annotate id prefix trueStmt true t) (walk annotate id prefix falseStmt false t)
         mergePaths (paths1, stats1) (paths2, stats2) = (paths1 ++ paths2, (node . path) stats1 +++ stats2)
 
-isFeasible :: Annotate -> Expr -> (() -> Z3 ([Path], Stats)) -> (() -> Z3 ([Path], Stats)) -> Z3 ([Path], Stats)
-isFeasible _        (LitB True) true _     = true ()
-isFeasible annotate wlp         true false = do
-  (result, _, _, _) <- assertPredicate (annotate wlp) [] [] []
+isFeasible :: Annotate -> Expr -> (() -> Z3 ([Path], Stats)) -> (() -> Z3 ([Path], Stats))  -> Maybe (Z3 Tactic) -> Z3 ([Path], Stats)
+isFeasible _        (LitB True) true _     _ = true ()
+isFeasible annotate wlp         true false t = do
+  (result, _, _, _) <- assertPredicate t (annotate wlp) [] [] []
   case result of
     Undef -> error "Undef"
     Unsat -> false ()
     Sat   -> true ()
 
-pickPaths :: Annotate -> ControlPath -> Z3 ([Path], Stats)
+pickPaths :: Annotate -> ControlPath -> Maybe (Z3 Tactic) -> Z3 ([Path], Stats)
 pickPaths annotate = walkPaths annotate []

@@ -6,6 +6,11 @@ import Data.List
 import GCLParser.GCLDatatype (Type(PType, AType), PrimitiveType(PTInt, PTBool))
 
 import Z3.Monad
+import Z3.Base (Tactic)
+import Debug.Trace (trace)
+
+debug :: c -> String -> c
+debug = flip trace
 
 -- | Convert an TypedExpr to a Z3 predicate which can be evaluated
 toPredicate :: TypedExpr -> Z3 AST
@@ -121,10 +126,23 @@ mkWithASTPair mkOperation e1 e2 = do
   b <- e2
   mkOperation a b
 
+handleTactics :: Z3 Tactic -> Z3 AST -> Z3 ()
+handleTactics ts expr = do
+  ts' <- ts
+  expr' <- expr
+  goal <- mkGoal True False False
+  goalAssert goal expr'
+  tr <- applyTactic ts' goal
+  gs <- getApplyResultSubgoals tr
+  exprs <- mapM getGoalFormulas gs
+  mapM_ assert $ concat exprs
+
 -- | Evaluate if expression is satisfiable and with which values
-assertPredicate :: TypedExpr -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-assertPredicate expr intNames boolNames arrayNames = do
-  assert =<< toPredicate expr
+assertPredicate :: Maybe (Z3 Tactic) -> TypedExpr -> [String] -> [String] -> [String] -> Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
+assertPredicate mt expr intNames boolNames arrayNames = do
+  case mt of
+    Nothing -> assert =<< toPredicate expr
+    Just t -> handleTactics t $ toPredicate expr
   (sat, m) <- solverCheckAndGetModel
   evaluateResult sat m intNames boolNames arrayNames
 
@@ -230,7 +248,7 @@ testForall = do
                 (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 7)))
                 (BinopExpr Equal (SizeOf (Var "a" (AType PTInt))) (LitI 2)))
                 (Forall "x" (BinopExpr LessThanEqual (LitI 7) (ArrayElem (Var "a" (AType PTInt)) (Var "x" (PType PTInt)))))
-  assertPredicate expr ["#a"] [] []
+  assertPredicate Nothing expr ["#a"] [] []
 
 -- | Test func to test RepBy
 startTestRepBy :: IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
@@ -249,7 +267,7 @@ testRepBy = do
                     (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (Var "y" (PType PTInt))))
                   (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (Var "z" (PType PTInt))))
 
-  assertPredicate expr ["x", "y", "z"] [] []
+  assertPredicate Nothing expr ["x", "y", "z"] [] []
 
 -- | Test func to test RepBy
 startTestBoolVar :: IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
@@ -270,5 +288,5 @@ testBoolVar = do
                     (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))
                     (Var "z" (PType PTBool))))
 
-  assertPredicate expr ["x", "y"] ["z"] ["a"]
+  assertPredicate Nothing expr ["x", "y"] ["z"] ["a"]
 

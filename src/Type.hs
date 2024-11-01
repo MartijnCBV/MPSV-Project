@@ -43,7 +43,22 @@ data TypedExpr
     | SizeOf             TypedExpr
     | RepBy              TypedExpr  TypedExpr   TypedExpr
     | Cond               TypedExpr  TypedExpr   TypedExpr
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show TypedExpr where
+    show (Var var _)                = var
+    show (LitI x)                   = show x
+    show (LitB True)                = "true"
+    show (LitB False)               = "false"
+    show (Parens e)                 = "(" ++ show e ++ ")"
+    show (ArrayElem var index)      = show var ++ "[" ++ show index ++ "]"
+    show (OpNeg expr)               = "~" ++ show expr
+    show (BinopExpr op e1 e2)       = "(" ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
+    show (Forall var p)             = "forall " ++ var ++ ":: " ++ show p
+    show (Exists var p)             = "exists " ++ var ++ ":: " ++ show p
+    show (SizeOf var)               = "#" ++ show var
+    show (RepBy var i val)          = show var ++ "(" ++ show i ++ " repby " ++ show val ++ ")"
+    show (Cond g e1 e2)             = "(" ++ show g ++ " -> " ++ show e1 ++ " | " ++ show e2 ++ ")"
 
 convertOp :: GDT.BinOp -> Op
 convertOp GDT.And              = And

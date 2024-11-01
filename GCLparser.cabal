@@ -36,6 +36,7 @@ executable verify
                      , Tree.Wlp
                      , Tree.Walk
                      , Predicate.Solver
+                     , Predicate.Tactics
                      , Simplifier.Simplifier
                      , Simplifier.Expr
                      , Simplifier.Boolean

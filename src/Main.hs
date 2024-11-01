@@ -13,6 +13,9 @@ import Stats
 import Traverse (traverseExpr)
 import System.TimeIt
 import Options.Applicative
+import Data.List (intercalate)
+import Z3.Base (Tactic)
+import Predicate.Tactics
 
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
@@ -32,23 +35,23 @@ sizeOf = toInt . traverseExpr (SemigroupInt . isLeaf)
                isLeaf (LitI _) = 1
                isLeaf _        = 0
 
-checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Path -> Z3 ((Result, [Maybe Integer], [Maybe Bool], [Maybe String]), Int)
-checkPath annotate (intNames, boolNames, arrayNames) (pth, _) = do
+checkPath :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> Path -> Maybe (Z3 Tactic) -> Z3 ((Result, [Maybe Integer], [Maybe Bool], [Maybe String]), Int)
+checkPath annotate (intNames, boolNames, arrayNames) (pth, _) t = do
   -- negate precondition, so that a result of "Unsat" indicates
   -- that the formula is always true -> valid
   let precond = OpNeg (getWlp pth)
-  (, sizeOf precond) <$> assertPredicate (annotate precond) intNames boolNames arrayNames
+  (, sizeOf precond) <$> assertPredicate t (annotate precond) intNames boolNames arrayNames
 
-checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Path] -> Z3 (Either Example (), Int)
-checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
-  ((result, intValues, boolValues, arrayValues), size) <- checkPath annotate names stmt
+checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Path] -> Maybe (Z3 Tactic) -> Z3 (Either Example (), Int)
+checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) t = do
+  ((result, intValues, boolValues, arrayValues), size) <- checkPath annotate names stmt t
   case result of
     Sat   -> return (Left (stmt, zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues), size)
     Unsat -> do
-      (res, totalSize) <- checkPaths annotate names stmts
+      (res, totalSize) <- checkPaths annotate names stmts t
       return (res, size + totalSize)
     Undef -> error "Undef"
-checkPaths _ _ [] = return (Right (), 0)
+checkPaths _ _ [] _ = return (Right (), 0)
 
 inputsOf :: Program -> ([String], [String], [String])
 inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool inputs), map getName (filter isArray inputs))
@@ -64,27 +67,28 @@ inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool i
           _ -> False
         getName (VarDeclaration name _) = name
 
-checkTree :: (Integral n) => n -> Program -> Z3 (Either Example (), Stats)
-checkTree depth prgm = do
+checkTree :: (Integral n) => n -> Program -> Maybe (Z3 Tactic) -> Z3 (Either Example (), Stats)
+checkTree depth prgm t = do
   let inputs = inputsOf prgm
   let annotate = annotateForProgram prgm
   let tree = extractPaths depth $ stmt prgm
-  (paths, stats) <- pickPaths annotate tree
-  (res, totalSize) <- checkPaths annotate inputs paths
+  (paths, stats) <- pickPaths annotate tree t
+  (res, totalSize) <- checkPaths annotate inputs paths t
   return (res, stats { totalSize = totalSize })
 
-checkProgram :: Int -> String -> IO (Either Example (), Stats)
-checkProgram depth filePath = do
+checkProgram :: Int -> String -> Maybe (Z3 Tactic) -> IO (Either Example (), Stats)
+checkProgram depth filePath t = do
   gcl <- parseGCLfile filePath
   prgm <- case gcl of
     Left err -> error err
     Right prgm -> pure prgm
-  evalZ3 $ checkTree depth prgm
+  evalZ3 $ checkTree depth prgm t
 
 data Config = Config {
   file :: String,
   csv :: Bool,
-  depth :: Int
+  depth :: Int,
+  runs :: Int
 }
 
 config :: Parser Config
@@ -101,6 +105,13 @@ config = Config
          <> help "Depth to verify to"
          <> showDefault
          <> value 10
+         <> metavar "INT" )
+      <*> option auto
+          ( long "runs"
+         <> short 'r'
+         <> help "Amount of runs to perform"
+         <> showDefault
+         <> value 1
          <> metavar "INT" )
 
 printVals :: (a -> String) -> [(String, Maybe a)] -> IO ()
@@ -127,18 +138,42 @@ printOut False time (Stats nodes paths unfins infeasibles size) = do
 printOut True time (Stats nodes paths unfins infeasibles size) =
   putStrLn $ concat [show time, ",", show size, ",", show nodes, ",", show paths, ",", show unfins, ",", show infeasibles]
 
-main :: IO ()
-main = do
-  (Config filePath csv depth) <- execParser opts
-  (time, (result, stats)) <- timeItT $ checkProgram depth filePath
-  printOut csv time stats
-  case (csv, result) of
+execHandleRes :: Bool -> Either Example () -> IO ()
+execHandleRes csv result = case (csv, result) of
     (True, _) -> pure ()
     (_, Left err) -> printExample err
     (_, Right ()) -> putStrLn "Program is valid"
-  return ()
+
+exec' :: String -> Bool -> Int -> Int -> [Double] -> Maybe (Z3 Tactic) -> IO ()
+exec' filePath csv depth 1 pts t = do
+  (time, (result, stats)) <- timeItT $ checkProgram depth filePath t
+  -- printOut csv time stats
+  -- execHandleRes csv result
+  putStrLn "All run times:"
+  putStrLn $ intercalate "," $ map show (time:pts)
+  let avg  = sum (time:pts) / fromIntegral (length (time:pts))
+      high = maximum (time:pts)
+      low  = minimum (time:pts)
+  putStrLn $ concat ["Average: ", show avg, " Best: ", show low," Worst: ", show high,  " Variance: ", show $ high - low]
+exec' filePath csv depth n pts t = do
+  (time, (result, stats)) <- timeItT $ checkProgram depth filePath t
+  -- printOut csv time stats
+  -- execHandleRes csv result
+  exec' filePath csv depth (n-1) (time:pts) t
+
+exec :: IO ()
+exec = do
+  (Config filePath csv depth runs) <- execParser opts
+  exec' filePath csv depth 10   [] Nothing
+  exec' filePath csv depth runs [] Nothing
+  exec' filePath csv depth 10   [] $ Just chain
+  exec' filePath csv depth runs [] $ Just chain
   where
     opts = info (config <**> helper)
       ( fullDesc
      <> progDesc "Verify program described in FILE"
      <> header "Bounded Symbolic Verification" )
+
+
+main :: IO ()
+main = exec
