@@ -15,6 +15,7 @@ import System.TimeIt
 import Options.Applicative
 import Tree.Data (Path, Step, Branch, BranchType (BExcept), Terminal (Except))
 import Control.Monad (when)
+import Tree.Heuristic
 
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
@@ -41,16 +42,16 @@ checkPath annotate (intNames, boolNames, arrayNames) (pth, _) = do
   let precond = OpNeg (getWlp pth)
   (, sizeOf precond) <$> assertPredicate (annotate precond) intNames boolNames arrayNames
 
-checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Path] -> Z3 (Either Example (), Int)
+checkPaths :: (Expr -> TypedExpr) -> ([String], [String], [String]) -> [Path] -> Z3 (Maybe Example, Int)
 checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
   ((result, intValues, boolValues, arrayValues), size) <- checkPath annotate names stmt
   case result of
-    Sat   -> return (Left (stmt, zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues), size)
+    Sat   -> return (Just (stmt, zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues), size)
     Unsat -> do
       (res, totalSize) <- checkPaths annotate names stmts
       return (res, size + totalSize)
     Undef -> error "Undef"
-checkPaths _ _ [] = return (Right (), 0)
+checkPaths _ _ [] = return (Nothing, 0)
 
 inputsOf :: Program -> ([String], [String], [String])
 inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool inputs), map getName (filter isArray inputs))
@@ -66,16 +67,16 @@ inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool i
           _ -> False
         getName (VarDeclaration name _) = name
 
-checkTree :: (Integral n) => n -> Program -> Z3 (Either Example (), Stats)
+checkTree :: (Integral n) => n -> Program -> Z3 (Maybe Example, Stats)
 checkTree depth prgm = do
   let inputs = inputsOf prgm
   let annotate = annotateForProgram prgm
   let tree = extractPaths depth $ stmt prgm
-  (paths, stats) <- pickPaths annotate (CheckAll AssumeIfFalse) tree
+  (paths, stats) <- listPaths True checkAll annotate tree
   (res, totalSize) <- checkPaths annotate inputs paths
   return (res, stats { totalSize = totalSize })
 
-checkProgram :: Int -> String -> IO (Either Example (), Stats)
+checkProgram :: Int -> String -> IO (Maybe Example, Stats)
 checkProgram depth filePath = do
   gcl <- parseGCLfile filePath
   prgm <- case gcl of
@@ -158,8 +159,8 @@ main = do
   printOut csv time stats
   case (csv, result) of
     (True, _) -> pure ()
-    (_, Left err) -> printExample showPath err
-    (_, Right ()) -> putStrLn "Program is valid"
+    (_, Just err) -> printExample showPath err
+    (_, Nothing) -> putStrLn "Program is valid"
   return ()
   where
     opts = info (config <**> helper)
