@@ -3,11 +3,11 @@
 module Main where
 
 import GCLParser.Parser ( parseGCLfile )
-import Type (annotateForProgram, TypedExpr)
+import Type (TypedExpr, Annotate, annotateWithTypes, programVars)
 import Tree.ProgramPath (extractPaths)
 import Tree.Walk
 import GCLParser.GCLDatatype
-import Z3.Monad
+import Z3.Monad ( Z3, Result(..), evalZ3 )
 import Predicate.Solver (assertPredicate)
 import Tree.Wlp (getWlp)
 import Stats
@@ -24,6 +24,7 @@ import Tree.Heuristic
       linear,
       exponential,
       untilDepth )
+import Simplifier.Simplifier (simplify)
 
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
 
@@ -61,6 +62,10 @@ checkPaths annotate names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
     Undef -> error "Undef"
 checkPaths _ _ [] = return (Nothing, 0)
 
+annotateForProgram :: Bool -> Program -> Annotate
+annotateForProgram False prgm = annotateWithTypes $ programVars prgm
+annotateForProgram True prgm  = simplify . annotateWithTypes (programVars prgm)
+
 inputsOf :: Program -> ([String], [String], [String])
 inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool inputs), map getName (filter isArray inputs))
   where inputs = input prgm
@@ -76,9 +81,9 @@ inputsOf prgm = (map getName (filter isInt inputs), map getName (filter isBool i
         getName (VarDeclaration name _) = name
 
 checkTree :: Config -> Program -> Z3 (Maybe Example, Stats)
-checkTree Config {depth=depth, heuristic=heuristic, optPruning=optPruning} prgm = do
+checkTree Config {depth=depth, heuristic=heuristic, optPruning=optPruning, optFormulas=optFormulas} prgm = do
   let inputs = inputsOf prgm
-  let annotate = annotateForProgram prgm
+  let annotate = annotateForProgram optFormulas prgm
   let tree = extractPaths depth $ stmt prgm
   (paths, stats) <- listPaths optPruning heuristic annotate tree
   (res, totalSize) <- checkPaths annotate inputs paths
@@ -97,6 +102,7 @@ data Config = Config {
   depth :: Int,
   heuristic :: Heuristic,
   optPruning :: Bool,
+  optFormulas :: Bool,
   csv :: Bool,
   showPath :: Bool
 }
@@ -110,7 +116,7 @@ parseHeuristic = eitherReader $ \case
   "half"      -> Right $ \d -> untilDepth (d `div` 2) Depth checkAll
   s           -> Left $ "Unsupported heuristic: " ++ s
 
-mkConfig :: String -> Int -> (Int -> Heuristic) -> Bool -> Bool -> Bool -> Config
+mkConfig :: String -> Int -> (Int -> Heuristic) -> Bool -> Bool -> Bool -> Bool -> Config
 mkConfig f d mkH = Config f d (mkH d)
 
 config :: Parser Config
@@ -132,9 +138,11 @@ config = mkConfig
          <> value (const checkAll)
          <> metavar "NAME")
       <*> switch
-          ( long "opt"
-         <> short 'o'
+          ( long "opt-branch"
          <> help "Optimize branch pruning")
+      <*> switch
+          ( long "opt-formula"
+         <> help "Optimize formulas before passing to Z3")
       <*> switch
           ( long "csv"
          <> help "Print in CSV format")
