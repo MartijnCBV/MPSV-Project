@@ -1,127 +1,155 @@
+{- | 
+This module contains all laws having to do with boolean logic
+-}
 module Simplifier.Boolean where
+
 import Simplifier.Expr
 import Data.List
+import Debug.Trace
 
+debug :: c -> String -> c
+debug = flip trace
 
--- identity: 
--- x /\ True = x
-iden :: Law
-iden (RedAnd       es          ) | null es'        = RedLitB True
-                                 | length es' == 1 = head es'
-                                 | otherwise       = RedAnd es'
-    where es' = map iden $ filter iden' es
-          iden' :: RedTypExpr -> Bool
-          iden' (RedLitB True) = False
-          iden' _              = True
-iden (RedBinopExpr o      e1 e2) = RedBinopExpr o (iden e1) (iden e2)
-iden (RedOpNeg     e           ) = RedOpNeg     $ iden e
-iden (RedArrayElem e1     e2   ) = RedArrayElem (iden e1) $ iden e2
-iden (RedForall    s      e    ) = RedForall    s $ iden e
-iden (RedExists    s      e    ) = RedExists    s $ iden e
-iden (RedSizeOf    e           ) = RedSizeOf    $ iden e
-iden (RedRepBy     e1     e2 e3) = RedRepBy     (iden e1) (iden e2) $ iden e3
-iden (RedCond      e1     e2 e3) = RedCond      (iden e1) (iden e2) $ iden e3
-iden e                           = e
+-- | Helper function for applying laws
+ttApply :: TTExpr -> BLaw -> TTExpr
+ttApply (TTOpExpr o es)     f = TTOpExpr o $ map f es
+ttApply (TTOpNeg  e)        f = TTOpNeg    $ f e
+ttApply (TTForall s e)      f = TTForall s $ f e
+ttApply (TTExists s e)      f = TTExists s $ f e
+ttApply (TTCond   e1 e2 e3) f = TTCond  (f e1) (f e2) (f e3)
+ttApply e                   _ = e
 
+-- | Associativity law: (P /\ Q) /\ R == P /\ (Q /\ R), (P \/ Q) \/ R == P \/ (Q \/ R)
+assocB :: BLaw
+assocB (TTOpExpr o es) = TTOpExpr o $ sort $ concatMap f es
+  where f :: TTExpr -> [TTExpr]
+        f e@(TTOpExpr o' es') | o == o'   = map assocB es'
+                              | otherwise = [assocB e]
+        f e                   = [assocB e]
+assocB e               = ttApply e assocB
 
--- annihilation: 
--- x /\ False = False
-annihilate :: Law
-annihilate (RedAnd       es          ) | RedLitB False `elem` es = RedLitB False
-                                       | otherwise               = RedAnd $ map annihilate es
-annihilate (RedBinopExpr o      e1 e2) = RedBinopExpr o (annihilate e1) (annihilate e2)
-annihilate (RedOpNeg     e           ) = RedOpNeg     $ annihilate e
-annihilate (RedArrayElem e1     e2   ) = RedArrayElem (annihilate e1) $ annihilate e2
-annihilate (RedForall    s      e    ) = RedForall    s $ annihilate e
-annihilate (RedExists    s      e    ) = RedExists    s $ annihilate e
-annihilate (RedSizeOf    e           ) = RedSizeOf    $ annihilate e
-annihilate (RedRepBy     e1     e2 e3) = RedRepBy     (annihilate e1) (annihilate e2) $ annihilate e3
-annihilate (RedCond      e1     e2 e3) = RedCond      (annihilate e1) (annihilate e2) $ annihilate e3
-annihilate e                           = e
+-- | Identity law: P /\ true = P, P \/ false = P
+idenB :: BLaw
+idenB (TTOpExpr o es) = case filter (/= TTLit (o == TBAnd)) es of
+                              []  -> TTLit (o == TBAnd)
+                              [e] -> idenB e
+                              es' -> TTOpExpr o $ map idenB es'
+idenB e = ttApply e idenB
 
+-- | Annihilation law: P /\ false = false, P \/ true = true
+annihilateB :: BLaw
+annihilateB (TTOpExpr TBAnd es) | TTLit False `elem` es = TTLit False
+                                | otherwise             = TTOpExpr TBAnd $ map annihilateB es
+annihilateB (TTOpExpr TBOr  es) | TTLit True  `elem` es = TTLit True
+                                | otherwise             = TTOpExpr TBOr $ map annihilateB es
+annihilateB e                   = ttApply e annihilateB
 
--- idempotence:
--- x /\ x = x
-idem :: Law
-idem (RedAnd       es          ) | null es'        = RedLitB True
-                                 | length es' == 1 = head es'
-                                 | otherwise       = RedAnd es'
-    where es' = map idem $ nub es
-idem (RedBinopExpr o      e1 e2) = RedBinopExpr o (idem e1) $ idem e2
-idem (RedOpNeg     e           ) = RedOpNeg     $ idem e
-idem (RedArrayElem e1     e2   ) = RedArrayElem (idem e1) $ idem e2
-idem (RedForall    s      e    ) = RedForall    s $ idem e
-idem (RedExists    s      e    ) = RedExists    s $ idem e
-idem (RedSizeOf    e           ) = RedSizeOf    $ idem e
-idem (RedRepBy     e1     e2 e3) = RedRepBy     (idem e1) (idem e2) $ idem e3
-idem (RedCond      e1     e2 e3) = RedCond      (idem e1) (idem e2) $ idem e3
-idem e                           = e
+-- | Idempotence law: P /\ P = P, P \/ P = P
+idemB :: BLaw
+idemB (TTOpExpr o es) | null es'        = TTLit True
+                      | length es' == 1 = head es'
+                      | otherwise       = TTOpExpr o es'
+  where es' = map idemB $ nub es
+idemB e               = ttApply e idemB
 
+-- | Complementation law: P /\ ~P = false, p \/ ~p = true
+complB :: BLaw
+complB (TTOpExpr o es) | or es''   = TTLit $ o /= TBAnd
+                       | otherwise = TTOpExpr o es'
+  where es'  = map complB es
+        es'' = map (\e -> TTOpNeg e `elem` es') es'
+complB e = ttApply e complB
 
--- complementation:
--- x /\ ~x = False
-compl :: Law
-compl (RedAnd es)                 | or es''   = RedLitB False
-                                  | otherwise = RedAnd es'
-    where es'  = map compl es
-          es'' = map (\e -> RedOpNeg e `elem` es') es'
-compl (RedBinopExpr o      e1 e2) = RedBinopExpr o (compl e1) $ compl e2
-compl (RedOpNeg     e           ) = RedOpNeg     $ compl e
-compl (RedArrayElem e1     e2   ) = RedArrayElem (compl e1) $ compl e2
-compl (RedForall    s      e    ) = RedForall    s $ compl e
-compl (RedExists    s      e    ) = RedExists    s $ compl e
-compl (RedSizeOf    e           ) = RedSizeOf    $ compl e
-compl (RedRepBy     e1     e2 e3) = RedRepBy     (compl e1) (compl e2) $ compl e3
-compl (RedCond      e1     e2 e3) = RedCond      (compl e1) (compl e2) $ compl e3
-compl e                           = e
+-- | Double negation law: ~~P = P
+dnegB :: BLaw
+dnegB (TTOpNeg (TTOpNeg e)) = dnegB e
+dnegB e                     = ttApply e dnegB
 
+-- | Negation application: ~true = false, ~false = true, ~Ex P(x) = Vx ~P(x), ~Vx P(x) = Ex ~P(x)
+negB :: BLaw
+negB (TTOpNeg (TTLit b))      = TTLit      $ not b
+negB (TTOpNeg (TTForall s e)) = TTExists s $ TTOpNeg e
+negB (TTOpNeg (TTExists s e)) = TTForall s $ TTOpNeg e
+negB e                        = ttApply e negB
 
--- double negation: 
--- ~~x = x
-dneg :: Law
-dneg (RedOpNeg     (RedOpNeg e)) = dneg e
-dneg (RedOpNeg     e           ) = RedOpNeg     $ dneg e
-dneg (RedBinopExpr o      e1 e2) = RedBinopExpr o (dneg e1) $ dneg e2
-dneg (RedAnd       es          ) = RedAnd       $ map dneg es
-dneg (RedArrayElem e1     e2   ) = RedArrayElem (dneg e1) $ dneg e2
-dneg (RedForall    s      e    ) = RedForall    s $ dneg e
-dneg (RedExists    s      e    ) = RedExists    s $ dneg e
-dneg (RedSizeOf    e           ) = RedSizeOf    $ dneg e
-dneg (RedRepBy     e1     e2 e3) = RedRepBy     (dneg e1) (dneg e2) $ dneg e3
-dneg (RedCond      e1     e2 e3) = RedCond      (dneg e1) (dneg e2) $ dneg e3
-dneg e                           = e
+-- | De Morgan's law: ~(P /\ Q) = ~P \/ ~Q, ~(P \/ Q) = ~P /\ ~Q
+morganB :: BLaw
+morganB (TTOpNeg (TTOpExpr o es)) = TTOpExpr o' es'
+  where o' = case o of
+              TBAnd -> TBOr
+              TBOr  -> TBAnd
+        es' = map TTOpNeg es
+morganB e = ttApply e morganB
 
+-- | Move quantifiers outwards
+quantB :: BLaw
+quantB (TTOpExpr o es) = foldr moveQuants (TTOpExpr o es'') quants
+  where (quants, es') = partition isQuant es
+        es'' = es' ++ map extractQuant quants
+        isQuant (TTForall _ _) = True
+        isQuant (TTExists _ _) = True
+        isQuant _              = False
+        extractQuant (TTForall _ e) = e
+        extractQuant (TTExists _ e) = e
+        extractQuant _              = error "should be unreachable"
+        moveQuants (TTForall s _) acc = TTForall s acc
+        moveQuants (TTExists s _) acc = TTExists s acc
+        moveQuants _              _   = error "should be unreachable"
+quantB e = ttApply e quantB
 
--- negation:
--- ~True  = False
--- ~False = True
-neg :: Law
-neg (RedOpNeg     (RedLitB b) ) = RedLitB      $ not b
-neg (RedOpNeg     e           ) = RedOpNeg     $ neg e
-neg (RedBinopExpr o      e1 e2) = RedBinopExpr o (neg e1) $ neg e2
-neg (RedAnd       es          ) = RedAnd       $ map neg es
-neg (RedArrayElem e1     e2   ) = RedArrayElem (neg e1) $ neg e2
-neg (RedForall    s      e    ) = RedForall    s $ neg e
-neg (RedExists    s      e    ) = RedExists    s $ neg e
-neg (RedSizeOf    e           ) = RedSizeOf    $ neg e
-neg (RedRepBy     e1     e2 e3) = RedRepBy     (neg e1) (neg e2) $ neg e3
-neg (RedCond      e1     e2 e3) = RedCond      (neg e1) (neg e2) $ neg e3
-neg e                           = e
+-- | Resolving comparisons on theory literals
+compB :: BLaw
+compB (TTheory o (TLit i1) (TLit i2)) = case o of
+                                          TLessThan      -> TTLit (i1 < i2)
+                                          TLessThanEqual -> TTLit (i1 <= i2)
+                                          TEqual         -> TTLit (i1 == i2)
+compB e                               = ttApply e compB
 
+-- | Rotating negated comparisions
+negCompB :: BLaw
+negCompB (TTOpNeg (TTheory TLessThan      e1 e2)) = TTheory TLessThanEqual e2 e1
+negCompB (TTOpNeg (TTheory TLessThanEqual e1 e2)) = TTheory TLessThan      e2 e1
+negCompB e                                        = ttApply e negCompB
 
--- associativity:
--- (a /\ b) /\ c = a /\ (b /\ c)
-assoc :: Law
-assoc (RedAnd es)             = RedAnd $ sort $ concatMap f es -- needs to be sorted for use in equality check
-    where f :: RedTypExpr -> [RedTypExpr]
-          f (RedAnd es') = concatMap f es'
-          f e            = [assoc e]
-assoc (RedArrayElem e1 e2   ) = RedArrayElem (assoc e1) $ assoc e2
-assoc (RedOpNeg     e       ) = RedOpNeg     $ assoc e
-assoc (RedBinopExpr o  e1 e2) = RedBinopExpr o (assoc e1) $ assoc e2
-assoc (RedForall    s  e    ) = RedForall    s $ assoc e
-assoc (RedExists    s  e    ) = RedExists    s $ assoc e
-assoc (RedSizeOf    e       ) = RedSizeOf    $ assoc e
-assoc (RedRepBy     e1 e2 e3) = RedRepBy     (assoc e1) (assoc e2) $ assoc e3
-assoc (RedCond      e1 e2 e3) = RedCond      (assoc e1) (assoc e2) $ assoc e3
-assoc e                       = e
+-- | eliminating <= comparisons
+elimCompB :: BLaw
+elimCompB (TTheory TLessThanEqual e1 e2) = TTheory TLessThan (TOpExpr TPlus [e1, TOpNeg $ TLit 1]) e2
+elimCompB e                              = ttApply e elimCompB
+
+-- | move literals to the left in comparisons
+movLCompB :: BLaw
+movLCompB e@(TTheory _ _ (TLit 0))            = e
+movLCompB (TTheory o e1 (TLit i))             = TTheory o (TOpExpr TPlus [e1, TOpNeg $ TLit i]) $ TLit 0
+movLCompB e@(TTheory o e1 (TOpExpr TPlus es)) | null nums = e
+                                              | otherwise = TTheory o (TOpExpr TPlus (e1: map TOpNeg nums)) r
+  where (nums, rest) = partition isLit es
+        r = case rest of
+              []  -> TLit 0
+              [x] -> x
+              xs  -> TOpExpr TPlus xs
+-- multiplication/division not supported atm
+movLCompB e                                 = ttApply e movLCompB
+
+-- | move non-literals to the right
+movRCompB :: BLaw
+movRCompB e@(TTheory _ (TLit _) _) = e
+movRCompB e@(TTheory o (TOpExpr TPlus es) e2) | null rest = e
+                                              | otherwise = TTheory o n (TOpExpr TPlus (e2: map TOpNeg rest))
+  where (nums, rest) = partition isLit es
+        n = case nums of
+              []  -> TLit 0
+              [x] -> x
+              xs  -> TOpExpr TPlus xs
+-- multiplication/division not supported atm
+movRCompB e = ttApply e movRCompB
+
+-- | simplify conditionals
+condB :: BLaw
+condB (TTCond (TTLit b) e2 e3) | b         = e2
+                               | otherwise = e3
+condB e                        = ttApply e condB
+
+isLit :: Theory -> Bool
+isLit (TOpNeg (TLit _)) = True
+isLit (TLit _)          = True
+isLit _                 = False

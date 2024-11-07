@@ -41,7 +41,7 @@ executable verify
                      , Simplifier.Simplifier
                      , Simplifier.Expr
                      , Simplifier.Boolean
-                     , Simplifier.Integer
+                     , Simplifier.Theory
                      , Utils.Traverse
                      , Utils.Type
                      , Utils.Count
