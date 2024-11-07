@@ -1,6 +1,8 @@
 module Tree.Heuristic where
+import GCLParser.GCLDatatype (Expr)
+import Utils.Count
 
-type Heuristic = DepthStats -> Bool
+type Heuristic = DepthStats -> Expr -> Bool
 
 -- | Type of Heuristic to use and sub parameters for each type
 -- never never calls Z3
@@ -11,31 +13,39 @@ type Heuristic = DepthStats -> Bool
 -- switchDepth switches between two heuristics based on the depth 
 
 never :: Heuristic
-never _ = False
+never _ _ = False
 
 checkAll :: Heuristic
-checkAll _ = True
+checkAll _ _ = True
 
 linear :: Float -> HeuristicMeasure -> Heuristic
-linear i Depth    (DS depth _        prunes) = round (i * fromIntegral prunes) <= depth
-linear i Branches (DS _     branches prunes) = round (i * fromIntegral prunes) <= branches
+linear i Depth    (DS depth _        prunes) _ = round (i * fromIntegral prunes) <= depth
+linear i Branches (DS _     branches prunes) _ = round (i * fromIntegral prunes) <= branches
 
 exponential :: Float -> HeuristicMeasure -> Heuristic
-exponential i Depth    (DS depth _        prunes) = round (i ^ prunes) <= depth
-exponential i Branches (DS _     branches prunes) = round (i ^ prunes) <= branches
+exponential i Depth    (DS depth _        prunes) _ = round (i ^ prunes) <= depth
+exponential i Branches (DS _     branches prunes) _ = round (i ^ prunes) <= branches
 
 untilDepth :: Int -> HeuristicMeasure -> Heuristic -> Heuristic
-untilDepth d Depth    heur ds@DS{depth=depth}       = depth < d && heur ds
-untilDepth d Branches heur ds@DS{branches=branches} = branches < d && heur ds
+untilDepth d Depth    heur ds@DS{depth=depth}       e = depth < d && heur ds e
+untilDepth d Branches heur ds@DS{branches=branches} e = branches < d && heur ds e
 
 switchDepth :: Int -> HeuristicMeasure -> Heuristic -> Heuristic -> Heuristic
-switchDepth m Depth    before after ds@DS{depth=depth}       = (depth <= m && before ds) || (depth > m && after ds)
-switchDepth m Branches before after ds@DS{branches=branches} = (branches <= m && before ds) || (branches > m && after ds)
+switchDepth m Depth    before after ds@DS{depth=depth}       e = (depth <= m && before ds e) || (depth > m && after ds e)
+switchDepth m Branches before after ds@DS{branches=branches} e = (branches <= m && before ds e) || (branches > m && after ds e)
 
+minConjunctions :: Int -> Heuristic
+minConjunctions i _ e = conjunctions e >= i
+
+minSize :: Int -> Heuristic
+minSize i _ e = sizeOf e >= i
+
+maxSize :: Int -> Heuristic
+maxSize i _ e = sizeOf e <= i
 
 -- | Decides whether the heuristic should be measured against depth (which includes all statements)
 -- or branches (branch depth) which only counts how many branches have occured before rather than how many statements
-data HeuristicMeasure 
+data HeuristicMeasure
   = Depth
   | Branches
 

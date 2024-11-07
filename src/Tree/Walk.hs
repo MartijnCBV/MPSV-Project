@@ -2,7 +2,7 @@ module Tree.Walk where
 import Predicate.Solver (assertPredicate)
 import Tree.Wlp (getFeasibleWlp)
 import GCLParser.GCLDatatype
-import Type (Annotate)
+import Utils.Type (Annotate)
 import Z3.Monad (Z3, Result (Sat, Unsat, Undef))
 import Stats
 import Control.Applicative
@@ -38,7 +38,7 @@ walkPaths opt heuristic annotate ds prefix (Bin cond true false) =
     walkBoth ()
   where
     doWalk = walk (walkPaths opt heuristic annotate (updateDS checkFeasibility ds))
-    checkFeasibility = heuristic ds
+    checkFeasibility = heuristic ds trueWlp
     feasible    = isFeasible annotate
     trueStep    = branch cond True
     falseStep   = branch cond False

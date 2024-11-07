@@ -1,4 +1,4 @@
-module Type where
+module Utils.Type where
 
 import qualified GCLParser.GCLDatatype as GDT (
   Type,
@@ -6,7 +6,7 @@ import qualified GCLParser.GCLDatatype as GDT (
   BinOp(And, Or, Implication, Minus, Plus, Multiply, Divide, LessThan, LessThanEqual, GreaterThan, GreaterThanEqual, Equal))
 import Data.Map (insert, Map, lookup, empty)
 import GCLParser.GCLDatatype (Program (..), VarDeclaration (VarDeclaration), Stmt (Block, TryCatch), Type (PType), PrimitiveType (PTInt))
-import Traverse (traverseStmt)
+import Utils.Traverse (traverseStmt)
 
 type Env = Map String GDT.Type
 type Annotate = GDT.Expr -> TypedExpr

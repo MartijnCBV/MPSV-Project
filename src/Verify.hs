@@ -1,38 +1,21 @@
-{-# LANGUAGE InstanceSigs #-}
 module Verify where
 
 import GCLParser.Parser ( parseGCLfile )
-import Type (Annotate, annotateWithTypes, programVars)
+import Utils.Type (Annotate, annotateWithTypes, programVars)
 import Tree.ProgramPath (extractPaths)
-import Tree.Walk
+import Tree.Walk ( listPaths )
 import GCLParser.GCLDatatype
 import Z3.Monad ( Z3, Result(..), evalZ3 )
 import Predicate.Solver (assertPredicate)
 import Tree.Wlp (feasibleWlp, validWlp)
-import Stats
-import Traverse (traverseExpr)
+import Stats ( Stats(totalSize) )
 import Simplifier.Simplifier (simplify)
 import Config
 import Tree.Data (Path, ControlPath, isExcept, getStmt)
+import Utils.Count (sizeOf)
 
 type VarNames = ([String], [String], [String])
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
-
-newtype SemigroupInt = SemigroupInt Int
-
-toInt :: SemigroupInt -> Int
-toInt (SemigroupInt i) = i
-
-instance Semigroup SemigroupInt where
-  (<>) :: SemigroupInt -> SemigroupInt -> SemigroupInt
-  (SemigroupInt i1) <> (SemigroupInt i2) = SemigroupInt $ i1 + i2
-
-sizeOf :: Expr -> Int
-sizeOf = toInt . traverseExpr (SemigroupInt . isLeaf)
-         where isLeaf (Var _)  = 1
-               isLeaf (LitB _) = 1
-               isLeaf (LitI _) = 1
-               isLeaf _        = 0
 
 checkPath :: Annotate -> VarNames -> Path -> Z3 ((Result, [Maybe Integer], [Maybe Bool], [Maybe String]), Int)
 checkPath annotate (intNames, boolNames, arrayNames) (pth, _) = do

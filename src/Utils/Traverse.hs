@@ -1,4 +1,4 @@
-module Traverse where
+module Utils.Traverse where
 
 import GCLParser.GCLDatatype
 

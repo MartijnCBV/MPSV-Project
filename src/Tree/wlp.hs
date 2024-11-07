@@ -1,7 +1,7 @@
 module Tree.Wlp where
 
 import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
-import Traverse (transformExpr)
+import Utils.Traverse (transformExpr)
 import Tree.Data
 
 type Name = String

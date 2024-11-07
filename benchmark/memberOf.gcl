@@ -4,8 +4,8 @@
 
 memberOf(x:int, a:[]int | found:bool) {
    // N is an experiment parameter
-   // N = 4
-   assume #a<=4 && #a>=0
+   // N = 6
+   assume #a<=6 && #a>=0
           && (exists k:: 0<=k && k<#a && a[k]=x) ;
    var k:int {
      k := 0 ;
@@ -17,6 +17,6 @@ memberOf(x:int, a:[]int | found:bool) {
        k := k+1
      } ;
      // adding few more checks:
-     assert found && k>=0 && k=#a && k<=4
+     assert found && k>=0 && k=#a && k<=6
    } 
 }

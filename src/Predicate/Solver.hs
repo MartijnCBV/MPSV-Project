@@ -1,6 +1,6 @@
 module Predicate.Solver where
 
-import Type
+import Utils.Type
 import Data.Maybe
 import Data.List
 import GCLParser.GCLDatatype (Type(PType, AType), PrimitiveType(PTInt, PTBool))

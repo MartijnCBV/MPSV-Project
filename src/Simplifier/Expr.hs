@@ -4,7 +4,7 @@
 module Simplifier.Expr where
 
 import GCLParser.GCLDatatype (Type)
-import Type ( TypedExpr(..), Op(..) )
+import Utils.Type ( TypedExpr(..), Op(..) )
 
 type Law   = RedTypExpr -> RedTypExpr
 type Merge = RedTypExpr -> RedTypExpr -> RedTypExpr
@@ -98,7 +98,7 @@ instance Convertable RedTypExpr TypedExpr where
     convert (RedArrayElem e1 e2   ) = ArrayElem (convert e1) $ convert e2
     convert (RedOpNeg     e       ) = OpNeg     $ convert e
     convert (RedBinopExpr o  e1 e2) = BinopExpr (convert o)   (convert e1) $ convert e2
-    convert (RedAnd       (e:es)  ) = foldr (\i acc -> BinopExpr Type.And acc $ convert i) (convert e) es
+    convert (RedAnd       (e:es)  ) = foldr (\i acc -> BinopExpr Utils.Type.And acc $ convert i) (convert e) es
     convert (RedAnd       []      ) = error "can not have empty and expression"
     convert (RedForall    s  e    ) = Forall    s                    $ convert e
     convert (RedExists    s  e    ) = Exists    s                    $ convert e

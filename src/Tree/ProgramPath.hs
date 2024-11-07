@@ -1,7 +1,7 @@
 module Tree.ProgramPath where
 
 import GCLParser.GCLDatatype
-import Traverse
+import Utils.Traverse
 import Tree.Data
 
 (+:) :: Stmt -> Stmt -> Stmt

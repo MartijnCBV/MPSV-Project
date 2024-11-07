@@ -1,7 +1,7 @@
 module Simplifier.Simplifier where
 import Simplifier.Expr
 import Simplifier.Boolean
-import Type
+import Utils.Type
 
 
 applyLaws :: RedTypExpr -> [Law] -> RedTypExpr
