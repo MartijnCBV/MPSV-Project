@@ -3,7 +3,7 @@
 {- |
 This module contains all types that have to do with the simplifier
 -}
-module Simplifier.Expr2 where
+module Simplifier.Expr where
 
 import GCLParser.GCLDatatype (Type)
 import Type ( TypedExpr(..), Op(..) )
@@ -30,7 +30,6 @@ data TTExpr
   | TTOpExpr             TBOp   [TTExpr]
   | TTForall             String  TTExpr
   | TTExists             String  TTExpr
-  | TTRepBy              TTExpr  TTExpr   TTExpr
   | TTCond               TTExpr  TTExpr   TTExpr
   | TTheory              TCOp    Theory   Theory
   deriving (Eq, Ord)
@@ -45,7 +44,6 @@ data Theory
   | TOpExpr            TOp    [Theory]
   | TBinopExpr         TBinOp  Theory   Theory
   | TRepBy             Theory  Theory   Theory
-  | TCond              Theory  Theory   Theory
   deriving (Eq, Ord)
 
 -- | Boolean operators
@@ -74,14 +72,14 @@ data TBinOp
 
 instance Show TTExpr where
   show :: TTExpr -> String
-  show (TTVar    s _)     = s
+  show (TTVar    s  _)     = s
   show (TTLit    b)       = show b
-  show (TTOpNeg  e)       = '~' : show e 
-  show (TTOpExpr o es)    = show o ++ show es
-  show (TTForall s e)     = concat ["\\-/ ", show s, "(", show e, ")"]
-  show (TTExists s e)     = concat ["E ", show s, "(", show e, ")"]
-  show (TTheory  o e1 e2) = concat ["(", show e1, show o, show e2, ")"]
-  show _                  = "undefined"
+  show (TTOpNeg  e)       = '~' : show e
+  show (TTOpExpr o  es)    = show o ++ show es
+  show (TTForall s  e)     = concat ["\\-/ ", show s, "(", show e, ")"]
+  show (TTExists s  e)     = concat ["E ", show s, "(", show e, ")"]
+  show (TTCond   e1 e2 e3) = concat [show e1, "->", show e2, "|", show e3]
+  show (TTheory  o  e1 e2) = concat ["(", show e1, show o, show e2, ")"]
 
 instance Show Theory where
   show :: Theory -> String
@@ -92,7 +90,7 @@ instance Show Theory where
   show (TOpNeg     e)        = '-' : show e
   show (TOpExpr    o  es)    = show o ++ show es
   show (TBinopExpr o  e1 e2) = concat ["(", show e1, show o, show e2, ")"]
-  show _                     = "undefined"
+  show (TRepBy     e1 e2 e3) = concat [show e1, "(", show e2, " repby ", show e3, ")"]
 
 instance Show TBOp where
   show :: TBOp -> String
@@ -135,7 +133,7 @@ instance Convertable TypedExpr TTExpr where
   convertLR (Forall    s  e)     = TTForall s $ convertLR e
   convertLR (Exists    s  e)     = TTExists s $ convertLR e
   convertLR (SizeOf    _)        = error "size of operations are not supported in boolean top level formulas"
-  convertLR (RepBy     e1 e2 e3) = TTRepBy (convertLR e1) (convertLR e2) (convertLR e3)
+  convertLR (RepBy     {})       = error "repby is not supported in boolean top level formulas"
   convertLR (Cond      e1 e2 e3) = TTCond  (convertLR e1) (convertLR e2) (convertLR e3)
 
   convertRL :: TTExpr -> TypedExpr
@@ -147,7 +145,6 @@ instance Convertable TypedExpr TTExpr where
                                   in foldr (\i acc -> BinopExpr o' acc $ convertRL i) (convertRL e) es
   convertRL (TTForall s e)      = Forall s $ convertRL e
   convertRL (TTExists s e)      = Exists s $ convertRL e
-  convertRL (TTRepBy  e1 e2 e3) = RepBy (convertRL e1) (convertRL e2) (convertRL e3)
   convertRL (TTCond   e1 e2 e3) = Cond  (convertRL e1) (convertRL e2) (convertRL e3)
   convertRL (TTheory  o  e1 e2) = let o' = case o of TLessThan -> LessThan; TLessThanEqual -> LessThanEqual; TEqual -> Equal
                                   in BinopExpr o' (cTheoryRL e1) (cTheoryRL e2)
@@ -170,7 +167,7 @@ cTheoryLR (Forall      _  _)     = error "forall is not supported in theory"
 cTheoryLR (Exists      _  _)     = error "exists is not supported in theory"
 cTheoryLR (SizeOf      e)        = TSizeOf $ cTheoryLR e
 cTheoryLR (RepBy       e1 e2 e3) = TRepBy (cTheoryLR e1) (cTheoryLR e2) (cTheoryLR e3)
-cTheoryLR (Cond        e1 e2 e3) = TCond  (cTheoryLR e1) (cTheoryLR e2) (cTheoryLR e3)
+cTheoryLR (Cond        {})       = error "conditional is not supported in theory"
 
 -- | Helper function for 'convertLR :: TTExpr -> TypedExpr'
 cTheoryRL :: Theory -> TypedExpr
@@ -184,4 +181,3 @@ cTheoryRL (TOpExpr      o (e:es)) = let o' = case o of TPlus -> Plus; TMultiply 
                                     in foldr (\i acc -> BinopExpr o' acc $ cTheoryRL i) (cTheoryRL e) es
 cTheoryRL (TBinopExpr   _  e1 e2) = BinopExpr Divide (cTheoryRL e1) (cTheoryRL e2)
 cTheoryRL (TRepBy       e1 e2 e3) = RepBy (cTheoryRL e1) (cTheoryRL e2) (cTheoryRL e3)
-cTheoryRL (TCond        e1 e2 e3) = Cond  (cTheoryRL e1) (cTheoryRL e2) (cTheoryRL e3)

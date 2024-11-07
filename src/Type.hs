@@ -59,7 +59,8 @@ instance Show TypedExpr where
   show (Forall    s  e)     = concat ["\\-/ ", show s, "(", show e, ")"]
   show (Exists    s  e)     = concat ["E ", show s, "(", show e, ")"]
   show (SizeOf    e)        = concat ["#(", show e, ")"]
-  show _                    = "undefined"
+  show (Cond      e1 e2 e3) = concat [show e1, "->", show e2, "|", show e3]
+  show (RepBy     e1 e2 e3) = concat [show e1, "(", show e2, " repby ", show e3, ")"]
 
 convertOp :: GDT.BinOp -> Op
 convertOp GDT.And              = And

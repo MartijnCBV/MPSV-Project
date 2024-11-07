@@ -2,9 +2,9 @@
 This module contains all laws having to do with the theory of integers
 -}
 
-module Simplifier.Integer where
+module Simplifier.Theory where
 
-import Simplifier.Expr2
+import Simplifier.Expr
 import Data.List
 
 -- | Helper function for applying laws
@@ -15,7 +15,6 @@ tApply (TOpNeg     e)        f = TOpNeg    $ f e
 tApply (TOpExpr    o  es)    f = TOpExpr o $ map f es
 tApply (TBinopExpr o  e1 e2) f = TBinopExpr o (f e1) (f e2)
 tApply (TRepBy     e1 e2 e3) f = TRepBy (f e1) (f e2) (f e3)
-tApply (TCond      e1 e2 e3) f = TCond  (f e1) (f e2) (f e3)
 tApply e _ = e
 
 -- | associativity
@@ -75,3 +74,9 @@ dnegT e                   = tApply e dnegT
 negT :: TLaw
 negT (TOpNeg (TOpExpr TPlus es)) = TOpExpr TPlus $ map TOpNeg es
 negT e                           = tApply e negT
+
+-- | simplify replace by
+repByT :: TLaw
+repByT (TArrayElem (TRepBy e1 e2 e3) e4) | e4 == e2  = e3
+                                         | otherwise = TArrayElem e1 e4
+repByT e                                 = tApply e repByT 

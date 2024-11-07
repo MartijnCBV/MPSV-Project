@@ -1,7 +1,7 @@
 module Simplifier.Simplifier where
-import Simplifier.Expr2
-import Simplifier.Boolean2
-import Simplifier.Integer
+import Simplifier.Expr
+import Simplifier.Boolean
+import Simplifier.Theory
 import Type
 
 applyLaws :: TTExpr -> [BLaw] -> TTExpr
@@ -32,13 +32,13 @@ applyTheoryLaws e                 = ttApply e applyTheoryLaws
 
 -- | Theory laws
 tlaws :: [TLaw]
-tlaws = [assocT, applyT, idenT, annihilateT, dnegT, negT]
-
+tlaws = [assocT, applyT, idenT, annihilateT, dnegT, negT, repByT]
 
 printLawTrace :: [TTExpr] -> IO ()
 printLawTrace es = mapM_ print $ reverse es
 
 simplify :: TypedExpr -> TypedExpr
-simplify e = convertRL e' `debug` ("Simplified::" ++ show e' ++ "\n")
-  where e' = applyLaws (convertLR e) laws `debug` ("Original::" ++ show e ++ "\n")
+simplify = convertRL . flip applyLaws laws . convertLR
+-- simplify e = convertRL e' `debug` ("Simplified::" ++ show e' ++ "\n")
+--   where e' = applyLaws (convertLR e) laws `debug` ("Original::" ++ show e ++ "\n")
 

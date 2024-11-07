@@ -1,9 +1,9 @@
 {- | 
 This module contains all laws having to do with boolean logic
 -}
-module Simplifier.Boolean2 where
+module Simplifier.Boolean where
 
-import Simplifier.Expr2
+import Simplifier.Expr
 import Data.List
 import Debug.Trace
 
@@ -16,7 +16,6 @@ ttApply (TTOpExpr o es)     f = TTOpExpr o $ map f es
 ttApply (TTOpNeg  e)        f = TTOpNeg    $ f e
 ttApply (TTForall s e)      f = TTForall s $ f e
 ttApply (TTExists s e)      f = TTExists s $ f e
-ttApply (TTRepBy  e1 e2 e3) f = TTRepBy (f e1) (f e2) (f e3)
 ttApply (TTCond   e1 e2 e3) f = TTCond  (f e1) (f e2) (f e3)
 ttApply e                   _ = e
 
@@ -143,6 +142,12 @@ movRCompB e@(TTheory o (TOpExpr TPlus es) e2) | null rest = e
               xs  -> TOpExpr TPlus xs
 -- multiplication/division not supported atm
 movRCompB e = ttApply e movRCompB
+
+-- | simplify conditionals
+condB :: BLaw
+condB (TTCond (TTLit b) e2 e3) | b         = e2
+                               | otherwise = e3
+condB e                        = ttApply e condB
 
 isLit :: Theory -> Bool
 isLit (TOpNeg (TLit _)) = True

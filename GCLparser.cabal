@@ -39,9 +39,9 @@ executable verify
                      , Tree.Walk
                      , Predicate.Solver
                      , Simplifier.Simplifier
-                     , Simplifier.Expr2
-                     , Simplifier.Boolean2
-                     , Simplifier.Integer
+                     , Simplifier.Expr
+                     , Simplifier.Boolean
+                     , Simplifier.Theory
                      , Traverse
                      , Type
                      , Stats
