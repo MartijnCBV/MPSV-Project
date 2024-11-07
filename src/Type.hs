@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 module Type where
 
 import qualified GCLParser.GCLDatatype as GDT (
@@ -17,14 +18,15 @@ data Op = And | Or | Implication
     deriving (Eq)
 
 instance Show Op where
-  show And = "&&"
-  show Or = "||"
+  show :: Op -> String
+  show And = "/\\"
+  show Or = "\\/"
   show Implication = "->"
   show LessThan = "<"
   show LessThanEqual = "<="
   show GreaterThan = ">"
   show GreaterThanEqual = ">="
-  show Equal = "=="
+  show Equal = "="
   show Plus = "+"
   show Minus = "-"
   show Multiply = "*"
@@ -43,7 +45,21 @@ data TypedExpr
     | SizeOf             TypedExpr
     | RepBy              TypedExpr  TypedExpr   TypedExpr
     | Cond               TypedExpr  TypedExpr   TypedExpr
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show TypedExpr where
+  show :: TypedExpr -> String
+  show (Var       s  _)     = s
+  show (LitI      i)        = show i
+  show (LitB      b)        = show b
+  show (Parens    e)        = concat ["(", show e, ")"]
+  show (ArrayElem e1 e2)    = concat [show e1, "[", show e2, "]"]
+  show (OpNeg     e)        = '~' : show e
+  show (BinopExpr o  e1 e2) = concat ["(", show e1, show o, show e2, ")"] 
+  show (Forall    s  e)     = concat ["\\-/ ", show s, "(", show e, ")"]
+  show (Exists    s  e)     = concat ["E ", show s, "(", show e, ")"]
+  show (SizeOf    e)        = concat ["#(", show e, ")"]
+  show _                    = "undefined"
 
 convertOp :: GDT.BinOp -> Op
 convertOp GDT.And              = And

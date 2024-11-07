@@ -1,59 +1,44 @@
 module Simplifier.Simplifier where
-import Simplifier.Expr
-import Simplifier.Boolean
+import Simplifier.Expr2
+import Simplifier.Boolean2
+import Simplifier.Integer
 import Type
 
-
-applyLaws :: RedTypExpr -> [Law] -> RedTypExpr
+applyLaws :: TTExpr -> [BLaw] -> TTExpr
 applyLaws e ls = head $ applyLawsTrace e ls
 
-
-applyLawsTrace :: RedTypExpr -> [Law] -> [RedTypExpr]
+applyLawsTrace :: TTExpr -> [BLaw] -> [TTExpr]
 applyLawsTrace e ls = let e' = foldl applyLaw [e] ls
                       in  if   e == head e'
                           then e'
                           else applyLawsTrace (head e') ls ++ e'
 
-
-applyLaw :: [RedTypExpr] -> Law -> [RedTypExpr]
+applyLaw :: [TTExpr] -> BLaw -> [TTExpr]
 applyLaw es l | head es == e = es
               | otherwise    = e : es
-    where e = l $ head es
+  where e = l $ head es
+
+laws :: [BLaw]
+laws = applyTheoryLaws : blaws
+
+blaws :: [BLaw]
+blaws = [assocB, dnegB, negB, annihilateB, idenB, idemB, complB, morganB, quantB, compB, negCompB, elimCompB, movLCompB, movRCompB]
+
+-- | Simplify theories
+applyTheoryLaws :: BLaw
+applyTheoryLaws (TTheory o e1 e2) = TTheory o (f e1) (f e2)
+  where f e = foldl (\acc g -> g acc) e tlaws 
+applyTheoryLaws e                 = ttApply e applyTheoryLaws
+
+-- | Theory laws
+tlaws :: [TLaw]
+tlaws = [assocT, applyT, idenT, annihilateT, dnegT, negT]
 
 
-laws :: [Law]
-laws = blaws ++ ilaws
-
-
-blaws :: [Law]
-blaws = [assoc, dneg, neg, annihilate, iden, idem, compl]
-
-
-ilaws :: [Law]
-ilaws = []
-
-
-printLawTrace :: [RedTypExpr] -> IO ()
+printLawTrace :: [TTExpr] -> IO ()
 printLawTrace es = mapM_ print $ reverse es
 
-
-expr1 :: TypedExpr
-expr1 = Parens (BinopExpr And
-        (BinopExpr Or
-            (OpNeg (BinopExpr Implication (LitB True) (LitB False)))  -- not (True -> False)
-            (BinopExpr Implication (OpNeg (LitB False)) (LitB True))  -- not False -> True
-        )
-        (BinopExpr Implication
-            (OpNeg (BinopExpr Or (LitB False) (LitB True)))  -- not (False or True)
-            (BinopExpr And (LitB True) (LitB True))          -- True and True
-        )
-    )
-
 simplify :: TypedExpr -> TypedExpr
-simplify = convert . flip applyLaws laws . convert
-
-test :: IO ()
-test = do
-    print expr1
-    printLawTrace $ applyLawsTrace (convert expr1) laws
+simplify e = convertRL e' `debug` ("Simplified::" ++ show e' ++ "\n")
+  where e' = applyLaws (convertLR e) laws `debug` ("Original::" ++ show e ++ "\n")
 
