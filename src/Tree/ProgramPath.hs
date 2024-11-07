@@ -96,11 +96,11 @@ extractPaths' n (Seq (TryCatch _ try catch) stmt, handles) =
   extractPaths' n (((catch +: stmt) : handles) $+> try +: stmt)
 
 extractPaths' n (Seq ass@(Assign _ expr) stmt, handles) =
-  catchException' n (errorsOn expr) continue handles
+  catchException n (errorsOn expr) (show ass) continue handles
   where continue = Uni ass $ extractPaths' (n - 1) (handles $+> stmt)
 
 extractPaths' n (Seq ass@(AAssign array index expr) stmt, handles) =
-  catchException' n errorCond continue handles
+  catchException n errorCond (show ass) continue handles
   -- index out of bounds exception when assigning to index out of bounds
   where errorCond = Just $ disjunct $ indexOOB (Var array) index : toList (errorsOn expr)
         continue  = Uni ass $ extractPaths' (n - 1) (handles $+> stmt)

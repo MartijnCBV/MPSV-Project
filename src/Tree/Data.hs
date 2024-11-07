@@ -49,6 +49,10 @@ type Branch = (Expr, BranchType, Bool)
 type Step = Either Stmt Branch
 type Path = ([Step], Terminal)
 
+isExcept :: Path -> Bool
+isExcept (_, Except) = True
+isExcept _ = False
+
 getStmt :: Step -> Stmt
 getStmt (Left stmt) = stmt
 getStmt (Right (cond, _, True)) = Assume cond
