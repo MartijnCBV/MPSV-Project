@@ -43,6 +43,8 @@ executable verify
                      , Simplifier.Boolean
                      , Simplifier.Integer
                      , Traverse
+                     , Verify
+                     , Config
                      , Type
                      , Stats
   hs-source-dirs:      src

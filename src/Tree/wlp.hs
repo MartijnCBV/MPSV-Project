@@ -1,4 +1,4 @@
-module Tree.Wlp (getWlp, getFeasibleWlp) where
+module Tree.Wlp (validWlp, feasibleWlp, getFeasibleWlp) where
 
 import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
 import Traverse (transformExpr)
@@ -33,10 +33,6 @@ feasibleWlp ((Assign s e) : rest)      = replace s e (feasibleWlp rest)
 feasibleWlp ((AAssign s e1 e2) : rest) = feasibleWlp $ Assign s (RepBy (Var s) e1 e2) : rest
 feasibleWlp [] = LitB True
 feasibleWlp _ = undefined
-
--- validity wlp arrives in forward (front-to-back) order
-getWlp :: [Step] -> Expr
-getWlp = validWlp
 
 -- feasibility wlp arrives in reverse (back-to-front) order, so reverse it
 getFeasibleWlp :: Step -> [Stmt] -> Expr
