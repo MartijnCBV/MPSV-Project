@@ -1,4 +1,4 @@
-module Tree.Wlp (validWlp, feasibleWlp, getFeasibleWlp) where
+module Tree.Wlp where
 
 import GCLParser.GCLDatatype (Stmt (..), Expr (..), opAnd, opImplication)
 import Traverse (transformExpr)
