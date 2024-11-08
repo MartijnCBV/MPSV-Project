@@ -42,12 +42,13 @@ printExample showPath findExcept ((path, term), intValues, boolValues, arrayValu
                     return ()
 
 printOut :: Bool -> Double -> Stats -> IO ()
-printOut False time (Stats nodes unfins infeasibles size) = do
+printOut False time (Stats nodes unfins feasChecks infeasibles feasSize validSize) = do
   putStrLn $ concat ["Inspected ", show nodes, " nodes"]
-  putStrLn $ concat ["Pruned ", show unfins, " incomplete paths and ", show infeasibles, " infeasible paths"]
-  putStrLn $ concat ["Checked formulas with total size of ", show size, "\nTook ", show time, " seconds"]
-printOut True time (Stats nodes unfins infeasibles size) =
-  putStrLn $ concat [show time, ",", show size, ",", show nodes, ",", show unfins, ",", show infeasibles]
+  putStrLn $ concat ["Pruned ", show unfins, " incomplete paths and ", show infeasibles, " infeasible paths (checked ", show feasChecks, " times for feasibility)"]
+  putStrLn $ concat ["Feasibility formulas size: ", show feasSize, "\nValidity formulas size: ", show validSize]
+  putStrLn $ concat ["Took ", show time, " seconds"]
+printOut True time (Stats nodes unfins feasChecks infeasibles feasSize validSize) =
+  putStrLn $ concat [show time, ",", show validSize, ",", show nodes, ",", show unfins, ",", show feasChecks, ",", show infeasibles, ",", show feasSize]
 
 data Msg = ProgramValid | FoundExample
 

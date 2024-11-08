@@ -8,11 +8,11 @@ import GCLParser.GCLDatatype
 import Z3.Monad ( Z3, Result(..), evalZ3 )
 import Predicate.Solver (assertPredicate)
 import Tree.Wlp (feasibleWlp, validWlp)
-import Stats ( Stats(totalSize) )
 import Simplifier.Simplifier (simplify)
 import Config
 import Tree.Data (Path, ControlPath, isExcept, getStmt)
 import Utils.Count (sizeOf)
+import Stats (Stats(validSize))
 
 type VarNames = ([String], [String], [String])
 type Example = (Path, [(String, Maybe Integer)], [(String, Maybe Bool)], [(String, Maybe String)])
@@ -79,14 +79,14 @@ checkTree cfg@Config {heuristic=heuristic, optPruning=optPruning, findExcept=Tru
   let (inputs, annotate, tree) = stuff cfg prgm
   (paths, stats) <- listPaths optPruning heuristic annotate tree
   let exceptPaths = filter isExcept paths
-  (res, totalSize) <- findFeasible annotate inputs exceptPaths
-  return (res, stats { totalSize = totalSize })
+  (res, validSize) <- findFeasible annotate inputs exceptPaths
+  return (res, stats { validSize = validSize })
 -- check program validity
 checkTree cfg@Config {heuristic=heuristic, optPruning=optPruning, findExcept=False} prgm = do
   let (inputs, annotate, tree) = stuff cfg prgm
   (paths, stats) <- listPaths optPruning heuristic annotate tree
-  (res, totalSize) <- checkPaths annotate inputs paths
-  return (res, stats { totalSize = totalSize })
+  (res, validSize) <- checkPaths annotate inputs paths
+  return (res, stats { validSize = validSize })
 
 checkProgram :: Config -> IO (Maybe Example, Stats)
 checkProgram cfg@Config {file=filePath} = do
