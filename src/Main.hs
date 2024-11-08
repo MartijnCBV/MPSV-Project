@@ -19,7 +19,7 @@ threaded = False
 numOfThreads :: Int
 numOfThreads = 8
 wlpInBulk :: Bool
-wlpInBulk = True
+wlpInBulk = not threaded 
 
 negateWlp :: (Expr -> TypedExpr) -> Stmt -> TypedExpr
 -- negate precondition, so that a result of "Unsat" indicates
