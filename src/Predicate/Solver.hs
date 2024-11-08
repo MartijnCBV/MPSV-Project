@@ -131,7 +131,7 @@ assertPredicates ((expr, stmt):exprs) intNames boolNames arrayNames = do
   if isNothing m
     then do
       solverReset
-      assertPredicates exprs stmts intNames boolNames arrayNames
+      assertPredicates exprs intNames boolNames arrayNames
     else do
       (result, intValues, boolValues, arrayValues) <- evaluateResult sat m intNames boolNames arrayNames
       return (result, intValues, boolValues, arrayValues, stmt)
@@ -219,61 +219,3 @@ evalArrayIndices model name (i:is) = do
   indexName <- return $ "#" ++ name ++ (show i)
   value <- (evalInt model) =<< mkIntVar =<< mkStringSymbol indexName
   return (value:rest)
-
-
--- TESTING FUNCS
-
--- | Test func to test Forall
-startTestForall :: IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-startTestForall = evalZ3 testForall
-testForall :: Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-testForall = do
-  expr <- return (BinopExpr And 
-                           (BinopExpr And 
-                           (BinopExpr And 
-                           (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 10)) 
-                           (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 7)))
-                           (BinopExpr Equal (SizeOf (Var "a" (AType PTInt))) (LitI 2)))                           
-                           (Forall "x" (BinopExpr LessThanEqual (LitI 7) (ArrayElem (Var "a" (AType PTInt)) (Var "x" (PType PTInt))))))
-  assertPredicate expr ["#a"] [] []
-
--- | Test func to test RepBy
-startTestRepBy :: IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-startTestRepBy = evalZ3 testRepBy
-testRepBy :: Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-testRepBy = do
-  expr <- return (BinopExpr And 
-                  (BinopExpr And 
-                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 0)) 
-                    (BinopExpr Or 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 1)) 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))))
-                    (BinopExpr And 
-                      (BinopExpr And 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (Var "x" (PType PTInt))) 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (Var "y" (PType PTInt))))
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (Var "z" (PType PTInt)))))
-
-  assertPredicate expr ["x", "y", "z"] [] []
-
--- | Test func to test RepBy
-startTestBoolVar :: IO (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-startTestBoolVar = evalZ3 testBoolVar
-testBoolVar :: Z3 (Result, [Maybe Integer], [Maybe Bool], [Maybe String])
-testBoolVar = do
-  expr <- return (BinopExpr And 
-                  (BinopExpr And 
-                    (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (LitI 0)) 
-                    (BinopExpr Or 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (LitI 1)) 
-                      (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2))))
-                    (BinopExpr And 
-                      (BinopExpr And 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 0)) (Var "x" (PType PTInt))) 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 1)) (Var "y" (PType PTInt))))
-                      (BinopExpr Equal 
-                        (BinopExpr Equal (ArrayElem (Var "a" (AType PTInt)) (LitI 2)) (LitI 2)) 
-                        (Var "z" (PType PTBool)))))
-
-  assertPredicate expr ["x", "y"] ["z"] ["a"]
-

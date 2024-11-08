@@ -98,8 +98,8 @@ threadCheckPaths outVar annotate params paths = do
   putMVar outVar result
 
 
-testThreads :: IO ()
-testThreads = do  
+main :: IO ()
+main = do  
   maxThreads <- getNumCapabilities
   putStrLn $ "Threaded: " ++ (show threaded) ++ " Threads: " ++ (show numOfThreads) ++ "/" ++ (show maxThreads) ++ " wlpInBulk: " ++ (show wlpInBulk)
   putStrLn . show =<< getCurrentTime
