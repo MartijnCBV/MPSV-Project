@@ -17,7 +17,7 @@ tApply (TBinopExpr o  e1 e2) f = TBinopExpr o (f e1) (f e2)
 tApply (TRepBy     e1 e2 e3) f = TRepBy (f e1) (f e2) (f e3)
 tApply e _ = e
 
--- | associativity
+-- | Associativity
 assocT :: TLaw
 assocT (TOpExpr o es)    = TOpExpr o $ sort $ concatMap f es
   where f :: Theory -> [Theory]
@@ -26,7 +26,7 @@ assocT (TOpExpr o es)    = TOpExpr o $ sort $ concatMap f es
         f e                  = [assocT e]
 assocT e                 = tApply e assocT
 
--- | application
+-- | Application
 applyT :: TLaw
 applyT (TOpExpr    o         es)                  = case o of
                                                       TPlus     -> result sum     es'
@@ -46,7 +46,7 @@ applyT (TOpNeg (TLit 0))                          = TLit 0
 applyT (TOpNeg (TLit i))                          = TLit (negate i)
 applyT e                                          = tApply e applyT
 
--- | identity
+-- | Identity
 idenT :: TLaw
 idenT (TOpExpr o es)                   = case filter (/= TLit iden) es of
                                             []  -> TLit iden
@@ -58,24 +58,24 @@ idenT (TOpExpr o es)                   = case filter (/= TLit iden) es of
 idenT (TBinopExpr TDivide e1 (TLit 1)) = e1
 idenT e                                = tApply e idenT
 
--- | annihilation
+-- | Annihilation
 annihilateT :: TLaw
 annihilateT (TOpExpr TMultiply es) | TLit 0 `elem` es' = TLit 0
                                    | otherwise         = TOpExpr TMultiply es'
   where es' = map annihilateT es
 annihilateT e                      = tApply e annihilateT
 
--- | double negation
+-- | Double negation
 dnegT :: TLaw
 dnegT (TOpNeg (TOpNeg e)) = e
 dnegT e                   = tApply e dnegT
 
--- | move negation inwards on plus
+-- | Move negation inwards on plus
 negT :: TLaw
 negT (TOpNeg (TOpExpr TPlus es)) = TOpExpr TPlus $ map TOpNeg es
 negT e                           = tApply e negT
 
--- | simplify replace by
+-- | Simplify replace by
 repByT :: TLaw
 repByT (TArrayElem (TRepBy e1 e2 e3) e4) | e4 == e2  = e3
                                          | otherwise = TArrayElem e1 e4
