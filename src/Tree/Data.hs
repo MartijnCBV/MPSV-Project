@@ -1,6 +1,8 @@
 {-# LANGUAGE InstanceSigs #-}
 module Tree.Data where
-import GCLParser.GCLDatatype (Stmt (Assume), Expr (OpNeg, Parens))
+-- import GCLParser.GCLDatatype (Stmt (Assume, AAssign), Expr (OpNeg, Parens))
+import Utils.Type (TypedExpr (OpNeg, Parens, Var), Annotate)
+import GCLParser.GCLDatatype (Stmt(Skip, Assert, Assume, Assign, AAssign), Type, Expr (Var))
 
 data UniBinTree l u b = Leaf l
   | Uni u (UniBinTree l u b)
@@ -24,7 +26,27 @@ instance Show BranchType where
   show BWhile = "While"
   show (BExcept stmt) = "Except " ++ stmt
 
-type ControlPath = UniBinTree Terminal Stmt (Expr, BranchType)
+data Action = Skip
+  | Assume TypedExpr
+  | Assert TypedExpr
+  | Assign  (String, Type) TypedExpr
+  | AAssign (String, Type) TypedExpr TypedExpr
+  deriving (Show)
+
+toVar :: Annotate -> String -> (String, Type)
+toVar annotate name = case annotate $ GCLParser.GCLDatatype.Var name of
+  Utils.Type.Var t n -> (t, n)
+  _ -> undefined
+
+fromStmt :: Annotate -> Stmt -> Action
+fromStmt _ GCLParser.GCLDatatype.Skip = Tree.Data.Skip
+fromStmt annotate (GCLParser.GCLDatatype.Assert e) = Tree.Data.Assert $ annotate e
+fromStmt annotate (GCLParser.GCLDatatype.Assume e) = Tree.Data.Assume $ annotate e
+fromStmt annotate (GCLParser.GCLDatatype.Assign n e) = Tree.Data.Assign (toVar annotate n) (annotate e)
+fromStmt annotate (GCLParser.GCLDatatype.AAssign n i e) = Tree.Data.AAssign (toVar annotate n) (annotate i) (annotate e)
+fromStmt _ stmt = error $ "Unsupported conversion from " ++ show stmt
+
+type ControlPath = UniBinTree Terminal Action (TypedExpr, BranchType)
 
 instance Ord Terminal where
   (<=) :: Terminal -> Terminal -> Bool
@@ -45,18 +67,18 @@ printTree n (Uni u next)       = replicate (n * 2) ' ' ++ show u ++ "\n" ++ prin
 printTree n (Bin b left right) = replicate (n * 2) ' ' ++ show b ++ "\n" ++ indent ++ "< LEFT >\n" ++ printTree (n + 1) left ++ indent ++ "< RIGHT >\n" ++ printTree (n + 1) right
   where indent = replicate ((n + 1) * 2) ' '
 
-type Branch = (Expr, BranchType, Bool)
-type Step = Either Stmt Branch
+type Branch = (TypedExpr, BranchType, Bool)
+type Step = Either Action Branch
 type Path = ([Step], Terminal)
 
 isExcept :: Path -> Bool
 isExcept (_, Except) = True
 isExcept _ = False
 
-getStmt :: Step -> Stmt
+getStmt :: Step -> Action
 getStmt (Left stmt) = stmt
-getStmt (Right (cond, _, True)) = Assume cond
-getStmt (Right (cond, _, False)) = Assume $ OpNeg $ Parens cond
+getStmt (Right (cond, _, True)) = Tree.Data.Assume cond
+getStmt (Right (cond, _, False)) = Tree.Data.Assume $ OpNeg $ Parens cond
 
-branch :: (Expr, BranchType) -> Bool -> Step
+branch :: (TypedExpr, BranchType) -> Bool -> Step
 branch (cond, btype) dir = Right (cond, btype, dir)

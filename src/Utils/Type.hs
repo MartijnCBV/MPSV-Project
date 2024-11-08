@@ -6,8 +6,7 @@ import qualified GCLParser.GCLDatatype as GDT (
   Expr(LitI, LitB, Var, Forall, Exists, BinopExpr, Parens, ArrayElem, OpNeg, SizeOf, RepBy, Cond),
   BinOp(And, Or, Implication, Minus, Plus, Multiply, Divide, LessThan, LessThanEqual, GreaterThan, GreaterThanEqual, Equal))
 import Data.Map (insert, Map, lookup, empty)
-import GCLParser.GCLDatatype (Program (..), VarDeclaration (VarDeclaration), Stmt (Block, TryCatch), Type (PType), PrimitiveType (PTInt))
-import Utils.Traverse (traverseStmt)
+import GCLParser.GCLDatatype (Program (..), VarDeclaration (VarDeclaration), Stmt (..), Type (PType), PrimitiveType (PTInt))
 
 type Env = Map String GDT.Type
 type Annotate = GDT.Expr -> TypedExpr
@@ -16,6 +15,19 @@ data Op = And | Or | Implication
     | LessThan | LessThanEqual | GreaterThan | GreaterThanEqual | Equal
     | Minus | Plus | Multiply | Divide
     deriving (Eq)
+
+opAnd :: TypedExpr -> TypedExpr -> TypedExpr
+opAnd = BinopExpr And
+opOr :: TypedExpr -> TypedExpr -> TypedExpr
+opOr  = BinopExpr Or
+opImplication :: TypedExpr -> TypedExpr -> TypedExpr
+opImplication = BinopExpr Implication
+opLessThan :: TypedExpr -> TypedExpr -> TypedExpr
+opLessThan = BinopExpr LessThan
+opGreaterThanEqual :: TypedExpr -> TypedExpr -> TypedExpr
+opGreaterThanEqual = BinopExpr GreaterThanEqual
+opEqual :: TypedExpr -> TypedExpr -> TypedExpr
+opEqual = BinopExpr Equal
 
 instance Show Op where
   show :: Op -> String
@@ -100,6 +112,14 @@ annotateWithTypes _ _ = undefined
 -- free variables in a quantified expression (e.g. forall i :: ...) are always integers
 addQuantifierVar :: String -> Map String GDT.Type -> Map String GDT.Type
 addQuantifierVar name = insert name (PType PTInt)
+
+traverseStmt :: (Semigroup m) => (Stmt -> m) -> Stmt -> m
+traverseStmt get stmt@(Seq stmt1 stmt2) = get stmt <> traverseStmt get stmt1 <> traverseStmt get stmt2
+traverseStmt get stmt@(IfThenElse _ stmt1 stmt2) = get stmt <> traverseStmt get stmt1 <> traverseStmt get stmt2
+traverseStmt get stmt@(While _ body) = get stmt <> traverseStmt get body
+traverseStmt get stmt@(Block _ block) = get stmt <> traverseStmt get block
+traverseStmt get stmt@(TryCatch _ try catch) = get stmt <> traverseStmt get try <> traverseStmt get catch
+traverseStmt get stmt = get stmt
 
 collectVarDecls :: Stmt -> [VarDeclaration]
 collectVarDecls = traverseStmt getVarDecls

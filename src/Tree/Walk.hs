@@ -1,8 +1,7 @@
 module Tree.Walk where
 import Predicate.Solver (assertPredicate)
 import Tree.Wlp (getFeasibleWlp)
-import GCLParser.GCLDatatype
-import Utils.Type (Annotate)
+import Utils.Type (TypedExpr (..))
 import Z3.Monad (Z3, Result (Sat, Unsat, Undef))
 import Stats
 import Control.Applicative
@@ -14,22 +13,24 @@ prependStmt :: Step -> [Path] -> [Path]
 prependStmt stmt ((stmts, term) : rest) = (stmt : stmts, term) : prependStmt stmt rest
 prependStmt _ [] = []
 
-type Walker = [Stmt] -> ControlPath -> Z3 ([Path], Stats)
+type Walker = [Action] -> ControlPath -> Z3 ([Path], Stats)
 
-walk :: Walker -> (Stats -> Stats) -> [Stmt] -> Step -> ControlPath -> Z3 ([Path], Stats)
+walk :: Walker -> (Stats -> Stats) -> [Action] -> Step -> ControlPath -> Z3 ([Path], Stats)
 walk walker updateStats prefix step next = do
   (paths, stats) <- walker (getStmt step : prefix) next
   return (prependStmt step paths, updateStats stats)
 
-walkPaths :: Bool -> Heuristic -> Annotate -> DepthStats -> [Stmt] -> ControlPath -> Z3 ([Path], Stats)
+
+
+walkPaths :: Bool -> Bool -> Heuristic -> DepthStats -> [Action] -> ControlPath -> Z3 ([Path], Stats)
 walkPaths _ _ _ _ _ (Leaf Unfin) = pure ([], unfin emptyStats)
 walkPaths _ _ _ _ _ (Leaf term) = pure ([([], term)], emptyStats)
-walkPaths opt heuristic annotate ds prefix (Uni stmt next) =
-  walk (walkPaths opt heuristic annotate (addDepth ds)) node prefix (Left stmt) next
-walkPaths opt heuristic annotate ds prefix (Bin cond true false) =
+walkPaths optF optB heuristic ds prefix (Uni stmt next) =
+  walk (walkPaths optF optB heuristic (addDepth ds)) node prefix (Left stmt) next
+walkPaths optF optB heuristic ds prefix (Bin cond true false) =
   -- prune infeasible branches if heuristic allows  
   if checkFeasibility then
-    if opt then
+    if optB then
       feasible trueWlp (\_ -> feasible falseWlp (walkBoth bothUpdate) (walkTrue bothUpdate)) (walkFalse trueUpdate)
     -- if trueWlp is... ^feasible -> check if false is feasible     ^infeasible -> we know false must be feasible
     else
@@ -38,13 +39,12 @@ walkPaths opt heuristic annotate ds prefix (Bin cond true false) =
   else
     walkBoth id ()
   where
-    doWalk = walk (walkPaths opt heuristic annotate (updateDS checkFeasibility ds))
+    doWalk = walk (walkPaths optF optB heuristic (updateDS checkFeasibility ds))
     checkFeasibility = heuristic ds trueWlp
-    feasible    = isFeasible annotate
     trueStep    = branch cond True
     falseStep   = branch cond False
-    trueWlp     = getFeasibleWlp trueStep  prefix
-    falseWlp    = getFeasibleWlp falseStep prefix
+    trueWlp     = getFeasibleWlp optF trueStep  prefix
+    falseWlp    = getFeasibleWlp optF falseStep prefix
     trueUpdate  = addSize (sizeOf trueWlp) . feasCheck
     bothUpdate  = addSize (sizeOf trueWlp + sizeOf falseWlp) . feasCheck
     bothUpdate2 = addSize (sizeOf trueWlp + sizeOf falseWlp) . feasCheck2
@@ -54,15 +54,15 @@ walkPaths opt heuristic annotate ds prefix (Bin cond true false) =
     walkBoth  s _ = liftA2 (mergePaths s) (doWalk id prefix trueStep true) (doWalk id prefix falseStep false)
     mergePaths s (paths1, stats1) (paths2, stats2) = (paths1 ++ paths2, (s . node) stats1 +++ stats2)
 
-isFeasible :: Annotate -> Expr -> (() -> Z3 ([Path], Stats)) -> (() -> Z3 ([Path], Stats)) -> Z3 ([Path], Stats)
-isFeasible _        (LitB True)  true _     = true ()
-isFeasible _        (LitB False) _ false    = false ()
-isFeasible annotate wlp          true false = do
-  (result, _, _, _) <- assertPredicate (annotate wlp) [] [] []
+feasible :: TypedExpr -> (() -> Z3 ([Path], Stats)) -> (() -> Z3 ([Path], Stats)) -> Z3 ([Path], Stats)
+feasible (LitB True)  true _     = true ()
+feasible (LitB False) _ false    = false ()
+feasible wlp          true false = do
+  (result, _, _, _) <- assertPredicate wlp [] [] []
   case result of
     Undef -> error "Undef"
     Unsat -> false ()
     Sat   -> true ()
 
-listPaths :: Bool -> Heuristic -> Annotate -> ControlPath -> Z3 ([Path], Stats)
-listPaths opt heuristic annotate = walkPaths opt heuristic annotate (DS 0 0 0) []
+listPaths :: Bool -> Bool -> Heuristic -> ControlPath -> Z3 ([Path], Stats)
+listPaths optF optB heuristic = walkPaths optF optB heuristic (DS 0 0 0) []

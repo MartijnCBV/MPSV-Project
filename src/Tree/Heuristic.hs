@@ -1,8 +1,8 @@
 module Tree.Heuristic where
-import GCLParser.GCLDatatype (Expr)
 import Utils.Count
+import Utils.Type (TypedExpr)
 
-type Heuristic = DepthStats -> Expr -> Bool
+type Heuristic = DepthStats -> TypedExpr -> Bool
 
 -- | Type of Heuristic to use and sub parameters for each type
 -- never never calls Z3
