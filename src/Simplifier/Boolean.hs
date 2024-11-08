@@ -5,10 +5,7 @@ module Simplifier.Boolean where
 
 import Simplifier.Expr
 import Data.List
-import Debug.Trace
-
-debug :: c -> String -> c
-debug = flip trace
+import Data.Function
 
 -- | Helper function for applying laws
 ttApply :: TTExpr -> BLaw -> TTExpr
@@ -111,12 +108,12 @@ negCompB (TTOpNeg (TTheory TLessThan      e1 e2)) = TTheory TLessThanEqual e2 e1
 negCompB (TTOpNeg (TTheory TLessThanEqual e1 e2)) = TTheory TLessThan      e2 e1
 negCompB e                                        = ttApply e negCompB
 
--- | eliminating <= comparisons
+-- | Eliminating <= comparisons
 elimCompB :: BLaw
 elimCompB (TTheory TLessThanEqual e1 e2) = TTheory TLessThan (TOpExpr TPlus [e1, TOpNeg $ TLit 1]) e2
 elimCompB e                              = ttApply e elimCompB
 
--- | move literals to the left in comparisons
+-- | <ove literals to the left in comparisons
 movLCompB :: BLaw
 movLCompB e@(TTheory _ _ (TLit 0))            = e
 movLCompB (TTheory o e1 (TLit i))             = TTheory o (TOpExpr TPlus [e1, TOpNeg $ TLit i]) $ TLit 0
@@ -130,7 +127,7 @@ movLCompB e@(TTheory o e1 (TOpExpr TPlus es)) | null nums = e
 -- multiplication/division not supported atm
 movLCompB e                                 = ttApply e movLCompB
 
--- | move non-literals to the right
+-- | Move non-literals to the right
 movRCompB :: BLaw
 movRCompB e@(TTheory _ (TLit _) _) = e
 movRCompB e@(TTheory o (TOpExpr TPlus es) e2) | null rest = e
@@ -143,7 +140,20 @@ movRCompB e@(TTheory o (TOpExpr TPlus es) e2) | null rest = e
 -- multiplication/division not supported atm
 movRCompB e = ttApply e movRCompB
 
--- | simplify conditionals
+-- | Eliminate subsumed theories
+subB :: BLaw
+subB (TTOpExpr o es) = TTOpExpr o (ts'' ++ es')
+  where (ts, es') = partition isLTheory es
+        ts'       = groupBy ((==) `on` snd) $ sortBy (compare `on` snd) $ map getTs ts
+        ts''      = map ((\(i, e2) -> TTheory TLessThan (TLit i) e2) . f (compare `on` fst)) ts'
+        f = case o of
+              TBAnd -> maximumBy
+              TBOr  -> minimumBy
+        getTs (TTheory _ (TLit i) e2) = (i, e2)
+        getTs _                       = error "should be unreachable"
+subB e = ttApply e subB
+
+-- | Simplify conditionals
 condB :: BLaw
 condB (TTCond (TTLit b) e2 e3) | b         = e2
                                | otherwise = e3
@@ -153,3 +163,7 @@ isLit :: Theory -> Bool
 isLit (TOpNeg (TLit _)) = True
 isLit (TLit _)          = True
 isLit _                 = False
+
+isLTheory :: TTExpr -> Bool
+isLTheory (TTheory TLessThan (TLit _) _) = True
+isLTheory _                              = False

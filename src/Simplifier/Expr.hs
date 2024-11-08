@@ -7,6 +7,10 @@ module Simplifier.Expr where
 
 import GCLParser.GCLDatatype (Type)
 import Type ( TypedExpr(..), Op(..) )
+import Debug.Trace
+
+debug :: c -> String -> c
+debug = flip trace
 
 -- | A blaw is a transformation function on an expression
 type BLaw = TTExpr -> TTExpr
