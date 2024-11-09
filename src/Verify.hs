@@ -24,17 +24,17 @@ getPrecond False pth = OpNeg (validWlp pth)
 getPrecond True pth  = simplify $ OpNeg (validWlp pth)
 
 checkPath :: Bool -> VarNames -> Path -> Z3 ((Result, [Maybe Integer], [Maybe Bool], [Maybe String]), Int)
-checkPath optF (intNames, boolNames, arrayNames) (pth, _) = do
-  let precond = getPrecond optF pth
+checkPath optV (intNames, boolNames, arrayNames) (pth, _) = do
+  let precond = getPrecond optV pth
   (, sizeOf precond) <$> assertPredicate precond intNames boolNames arrayNames
 
 checkPaths :: Bool -> VarNames -> [Path] -> Z3 (Maybe Example, Int)
-checkPaths optF names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
-  ((result, intValues, boolValues, arrayValues), size) <- checkPath optF names stmt
+checkPaths optV names@(intNames, boolNames, arrayNames) (stmt : stmts) = do
+  ((result, intValues, boolValues, arrayValues), size) <- checkPath optV names stmt
   case result of
     Sat   -> return (Just (stmt, zip intNames intValues, zip boolNames boolValues, zip arrayNames arrayValues), size)
     Unsat -> do
-      (res, totalSize) <- checkPaths optF names stmts
+      (res, totalSize) <- checkPaths optV names stmts
       return (res, size + totalSize)
     Undef -> error "Undef"
 checkPaths _ _ [] = return (Nothing, 0)
@@ -78,17 +78,17 @@ findFeasible _ [] = return (Nothing, 0)
 
 checkTree :: Config -> Program -> Z3 (Maybe Example, Stats)
 -- find exceptional paths
-checkTree cfg@Config {heuristic=heuristic, optPruning=optB, optFormulas=optF, findExcept=True} prgm = do
+checkTree cfg@Config {heuristic=heuristic, optPruning=optB, optFeasible=optF, findExcept=True} prgm = do
   let (inputs, tree) = stuff cfg prgm
   (paths, stats) <- listPaths optF optB heuristic tree
   let exceptPaths = filter isExcept paths
   (res, validSize) <- findFeasible inputs exceptPaths
   return (res, stats { validSize = validSize })
 -- check program validity
-checkTree cfg@Config {heuristic=heuristic, optPruning=optB, optFormulas=optF, findExcept=False} prgm = do
+checkTree cfg@Config {heuristic=heuristic, optPruning=optB, optValid=optV, optFeasible=optF, findExcept=False} prgm = do
   let (inputs, tree) = stuff cfg prgm
   (paths, stats) <- listPaths optF optB heuristic tree
-  (res, validSize) <- checkPaths optF inputs paths
+  (res, validSize) <- checkPaths optV inputs paths
   return (res, stats { validSize = validSize })
 
 checkProgram :: Config -> IO (Maybe Example, Stats)

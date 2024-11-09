@@ -12,7 +12,8 @@ data Config = Config {
   heuristic :: Heuristic,
   findExcept :: Bool,
   optPruning :: Bool,
-  optFormulas :: Bool,
+  optValid :: Bool,
+  optFeasible :: Bool,
   csv :: Bool,
   showPath :: Bool
 }
@@ -53,7 +54,7 @@ parseHeuristic = eitherReader $ \case
   "thirdsB"     -> Right $ \d -> switchDepth (d `div` 3) Branches checkAll (switchDepth ((d `div` 3) * 2) Branches (linear 2 Branches) (exponential 2 Depth))
   s             -> parseParamHeuristic s
 
-mkConfig :: String -> Int -> (Int -> Heuristic) -> Bool -> Bool -> Bool -> Bool -> Bool -> Config
+mkConfig :: String -> Int -> (Int -> Heuristic) -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config
 mkConfig f d mkH = Config f d (mkH d)
 
 config :: Parser Config
@@ -82,8 +83,11 @@ config = mkConfig
           ( long "opt-branch"
          <> help "Optimize branch pruning")
       <*> switch
-          ( long "opt-formula"
-         <> help "Optimize formulas before passing to Z3")
+          ( long "opt-valid"
+         <> help "Optimize validity formulas before passing to Z3")
+      <*> switch
+          ( long "opt-feasible"
+         <> help "Optimize validity formulas before passing to Z3")
       <*> switch
           ( long "csv"
          <> help "Print in CSV format")
