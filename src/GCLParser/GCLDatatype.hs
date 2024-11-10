@@ -13,17 +13,17 @@ type Depth = Int
 data PrimitiveType 
     = PTInt 
     | PTBool
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data Type 
     = PType PrimitiveType  -- primitive tyoe
     | RefType
     | AType PrimitiveType  -- array type, one dimensional
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data VarDeclaration 
     = VarDeclaration String Type
-    deriving (Show)
+    deriving (Show, Eq)
 
 {-
 data Procedure 
@@ -55,6 +55,7 @@ data Stmt
     | While      Expr             Stmt   
     | Block      [VarDeclaration] Stmt   
     | TryCatch   String           Stmt   Stmt
+    deriving (Eq)
 --    | Call       [String]         [Expr] String
 
 instance Show Stmt where

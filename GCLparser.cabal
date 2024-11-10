@@ -12,8 +12,18 @@ build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
 
-Library
-  exposed-modules:     GCLParser.Parser
+executable verify
+  main-is:             Main.hs
+  build-depends:       base   >= 4.10
+                     , array
+                     , containers
+                     , optparse-applicative
+                     , pretty
+                     , z3
+                     , timeit
+                     , optparse-applicative
+                    --  , gclparser-lib
+  other-modules:     GCLParser.Parser
                      , GCLParser.GCLDatatype
                      , GCLParser.PrettyPrint
                      , GCLInterpreter
@@ -22,16 +32,71 @@ Library
                      , GCLLexer.Token
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
-  -- other-extensions:
-  build-depends:       base   >= 4.10
-                     , array
-                     , containers
-                     , optparse-applicative
-                     , pretty
-                     , z3
+                     , Tree.Data
+                     , Tree.Heuristic
+                     , Tree.ProgramPath
+                     , Tree.Wlp
+                     , Tree.Walk
+                     , Predicate.Solver
+                     , Simplifier.Simplifier
+                     , Simplifier.Expr
+                     , Simplifier.Boolean
+                     , Simplifier.Theory
+                     , Utils.Traverse
+                     , Utils.Type
+                     , Utils.Count
+                     , Verify
+                     , Config
+                     , Stats
   hs-source-dirs:      src
-  build-tools:         happy, alex
   default-language:    Haskell2010
   GHC-Options:         -Wall
+  build-tools:         happy, alex
   default-extensions:  TupleSections
                      , NamedFieldPuns
+
+-- library gclparser-lib
+--   exposed-modules:     GCLParser.Parser
+--                      , GCLParser.GCLDatatype
+--                      , GCLParser.PrettyPrint
+--                      , GCLInterpreter
+--                      , MuGCL
+--                      , GCLUtils
+--                      , GCLLexer.Token
+--                      , GCLLexer.Lexer
+--                      , ExamplesOfSemanticFunction
+--                      , Tree.ProgramPath
+--                      , Tree.Wlp
+--                      , Tree.Walk
+--                      , Predicate.Solver
+--                      , Simplifier.Simplifier
+--                      , Simplifier.Expr
+--                      , Simplifier.Boolean
+--                      , Simplifier.Integer
+--                      , Traverse
+--                      , Type
+--                      , Stats
+--                      , Main
+--   -- other-extensions:
+--   build-depends:       base   >= 4.10
+--                      , array
+--                      , containers
+--                      , optparse-applicative
+--                      , pretty
+--                      , z3
+--                      , timeit
+--                      , optparse-applicative
+--                     --  , mtl
+--   hs-source-dirs:      src
+--   build-tools:         happy, alex
+--   default-language:    Haskell2010
+--   GHC-Options:         -Wall
+--   default-extensions:  TupleSections
+--                      , NamedFieldPuns
+
+test-suite tests
+    type: exitcode-stdio-1.0
+    main-is: TreeTest.hs
+    build-depends: base >=4.10, HUnit >=1.6, gclparser-lib
+    hs-source-dirs: test
+    default-language: Haskell2010
