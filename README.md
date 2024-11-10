@@ -11,6 +11,45 @@ Provide VAPE with the name of the file containing the program you want to verify
 - `--opt-feasible`: simplify formulas for checking feasibility of paths.
 - `--csv`: print output statistics in CSV format.
 
+An example command using `cabal run` would be `cabal run exes -- benchmark/memberOf.gcl -d 50 --opt-branches -p`. The output should look similar to the following:
+```
+Inspected 147 nodes
+Pruned 0 incomplete paths and 35 infeasible paths (checked 60 times for feasibility)
+Feasibility formulas size: 5022
+Validity formulas size: 97
+Took 0.465492911 seconds
+Found counterexample for inputs:
+x = 6
+a = [6,6,6,6]
+Path:
+assume (((#(a)<=4)/\(#(a)>=0))/\(E "i"((((0<=i)/\(i<#(a)))/\(a[i]=x)))))
+k := 0
+found := False
+while (k<#(a)) (True branch)
+if (a[k]=x) (no exception)
+if (a[k]=x) (True branch)
+found := True
+k := (k+1)
+while (k<#(a)) (True branch)
+if (a[k]=x) (no exception)
+if (a[k]=x) (True branch)
+found := True
+k := (k+1)
+while (k<#(a)) (True branch)
+if (a[k]=x) (no exception)
+if (a[k]=x) (True branch)
+found := True
+k := (k+1)
+while (k<#(a)) (True branch)
+if (a[k]=x) (no exception)
+if (a[k]=x) (True branch)
+found := True
+k := (k+1)
+while (k<#(a)) (False branch)
+assert (((~found/\(k>=0))/\(k=#(a)))/\(k<=4))
+Terminating normally
+```
+
 ## Heuristics
 VAPE admits a large number of different heuristic strategies to use for determining when to check branches for feasibility.
 
@@ -39,3 +78,6 @@ The `assert` statement is at a node depth of 3, since there are three nodes befo
 - `linHalfB`: As `linHalf`, but switches after a branch depth of half of K is reached.
 - `thirds`: As `always` while the node depth is below a third of K, then as `linB2` while the node depth is below two-thirds of K, then finally as `exp2`.
 - `thirdsB`: As `thirds`, but using the branch depth instead.
+- `minConjN`: Check only if the feasibility formula contains at least N conjunctions.
+- `minSizeN`: Check only if the feasibility formula contains at least N atoms.
+- `maxSizeN`: Check only if the feasibility formula contains at most N atoms.
