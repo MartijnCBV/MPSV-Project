@@ -17,9 +17,9 @@ printValues :: (Show a) => [(String, Maybe a)] -> IO ()
 printValues = printVals show
 
 printBranch :: Branch -> IO ()
-printBranch (_, BExcept stmt, True)  = putStrLn $ "Exception in: " ++ stmt
-printBranch (_, BExcept stmt, False) = putStrLn $ "No exception in: " ++ stmt
-printBranch (cond, btype, dir) = putStrLn $ concat ["Branch ", show dir, " in ", show btype, " ", show cond]
+printBranch (_, BExcept stmt, True)  = putStrLn $ stmt ++ " (exception)"
+printBranch (_, BExcept stmt, False) = putStrLn $ stmt ++ " (no exception)"
+printBranch (cond, btype, dir) = putStrLn $ concat [show btype, " ", show cond, " (", show dir, " branch)"]
 
 printPath :: [Step] -> IO ()
 printPath []                    = pure ()

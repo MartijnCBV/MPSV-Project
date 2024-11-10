@@ -54,7 +54,9 @@ getErrors _ = []
 
 catchException' :: (Integral n) => Annotate -> n -> Maybe TypedExpr -> ControlPath -> [Stmt] -> ControlPath
 catchException' _ _ Nothing continue _ = continue
-catchException' a n (Just cond) continue handles = catchException a n (Just cond) (show cond) continue handles
+catchException' a n cond cont@(Bin (expr, btype) _ _) handles = catchException a n cond info cont handles
+  where info = show btype ++ " " ++ show expr
+catchException' _ _ _ _ _ = undefined
 
 catchException :: (Integral n) => Annotate -> n -> Maybe TypedExpr -> String -> ControlPath -> [Stmt] -> ControlPath
 -- if there's no error condition, just continue

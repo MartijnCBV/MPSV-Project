@@ -22,16 +22,22 @@ data BranchType = BIf | BWhile | BExcept String
 
 instance Show BranchType where
   show :: BranchType -> String
-  show BIf = "If"
-  show BWhile = "While"
-  show (BExcept stmt) = "Except " ++ stmt
+  show BIf = "if"
+  show BWhile = "while"
+  show (BExcept stmt) = "except " ++ stmt
 
 data Action = Skip
   | Assume TypedExpr
   | Assert TypedExpr
   | Assign  (String, Type) TypedExpr
   | AAssign (String, Type) TypedExpr TypedExpr
-  deriving (Show)
+
+instance Show Action where
+    show Tree.Data.Skip                     = "skip"
+    show (Tree.Data.Assert condition)       = "assert " ++ show condition
+    show (Tree.Data.Assume condition)       = "assume " ++ show condition
+    show (Tree.Data.Assign (var, _) e)           = var ++ " := " ++ show e 
+    show (Tree.Data.AAssign (var, _) i e)        = var ++ "[" ++ show i ++ "]" ++ " := " ++ show e
 
 toVar :: Annotate -> String -> (String, Type)
 toVar annotate name = case annotate $ GCLParser.GCLDatatype.Var name of
